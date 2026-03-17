@@ -1,0 +1,33 @@
+:root {
+  --bg-primary: #ffffff;
+  --text-primary: #202124;
+  --text-secondary: #5f6368;
+  --google-blue: #1a73e8;
+  --border-color: #dfe1e5;
+  --shadow-normal: 0 1px 6px rgba(32,33,36,0.28);
+  --shadow-hover: 0 4px 12px rgba(32,33,36,0.15);
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--google-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
