@@ -1,7 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { fetchEngineers, type Engineer } from '../services/engineerService';
-import { Search, Download, RefreshCw, UserCheck } from 'lucide-react';
+import { Search, Download, RefreshCw, UserCheck, Activity, X } from 'lucide-react';
 import './AdminPanel.css';
+
+interface EnrichmentLog {
+  timestamp: string;
+  name: string;
+  license: string;
+  email: string;
+}
+
+interface EnrichmentStatus {
+  status: 'running' | 'stopped' | 'error';
+  lastActive: string;
+  message: string;
+  totalChecked?: number;
+}
 
 const AdminPanel: React.FC = () => {
   const [engineers, setEngineers] = useState<Engineer[]>([]);
@@ -17,24 +31,156 @@ const AdminPanel: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
 
+  // New state for enrichment monitor modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [enrichmentLogs, setEnrichmentLogs] = useState<EnrichmentLog[]>([]);
+  const [pendingEnrichments, setPendingEnrichments] = useState<any[]>([]);
+  const [scriptStatus, setScriptStatus] = useState<EnrichmentStatus | null>(null);
+
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch('/enrichment_logs.json');
+      if (res.ok) {
+        const data = await res.json();
+        setEnrichmentLogs(data);
+      }
+    } catch (err) {
+      console.warn('Wystąpił błąd przy pobieraniu logów, plik może nie istnieć:', err);
+    }
+  };
+
+  const fetchPending = async () => {
+    try {
+      const res = await fetch('/enrichment_pending.json');
+      if (res.ok) {
+        const data = await res.json();
+        setPendingEnrichments(data);
+      } else {
+        setPendingEnrichments([]);
+      }
+    } catch (err) {
+      console.warn('Wystąpił błąd przy pobieraniu poczekalni, plik może nie istnieć:', err);
+    }
+  };
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch('/enrichment_status.json');
+      if (res.ok) {
+        const data = await res.json();
+        
+        // Pomiń wyświetlanie że działa, jeśli ostatni ping był dawniej niż np. 2 minuty temu (skrypt mógł paść bez pożegnania)
+        const lastActiveTime = new Date(data.lastActive).getTime();
+        const now = new Date().getTime();
+        const twoMinutes = 2 * 60 * 1000;
+        
+        if (data.status === 'running' && (now - lastActiveTime > twoMinutes)) {
+          data.status = 'stopped';
+          data.message = 'Nie wykryto aktywności skryptu od dłuższego czasu (zawiesił się lub został zamknięty).';
+        }
+
+        setScriptStatus(data);
+      }
+    } catch (err) {
+      setScriptStatus(null);
+    }
+  };
+
+  const handleToggleScript = async () => {
+    try {
+      if (scriptStatus?.status === 'running') {
+        const res = await fetch('/api/enrichment/stop', { method: 'POST' });
+        if (res.ok) {
+          setScriptStatus(prev => prev ? { ...prev, status: 'stopped' } : null);
+        }
+      } else {
+        const res = await fetch('/api/enrichment/start', { method: 'POST' });
+        if (res.ok) {
+          setScriptStatus(prev => prev ? { ...prev, status: 'running' } : { status: 'running', message: 'Uruchamianie...', lastActive: new Date().toISOString(), totalChecked: 0 });
+        }
+      }
+      setTimeout(fetchStatus, 1000);
+    } catch (err) {
+      console.error('Failed to toggle script', err);
+    }
+  };
+
   useEffect(() => {
     fetchEngineers().then(data => {
       setEngineers(data);
       setFiltered(data);
     });
+
+    // Initial fetch
+    fetchStatus();
+
+    // Auto-popup every 1 hour (3600000ms) for modal logs
+    const intervalLogs = setInterval(() => {
+      setIsModalOpen(true);
+      fetchLogs();
+      fetchPending();
+    }, 3600000);
+
+    // Poll status every 5 seconds to get heartbeat 
+    const intervalStatus = setInterval(() => {
+      fetchStatus();
+      if (isModalOpen) {
+         fetchPending();
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(intervalLogs);
+      clearInterval(intervalStatus);
+    };
   }, []);
 
+  // Fetch logs manually when modal opens via button
   useEffect(() => {
-    let result = engineers.filter(e => 
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.licenseNumber.toLowerCase().includes(search.toLowerCase())
-    );
+    if (isModalOpen) {
+      fetchLogs();
+      fetchPending();
+    }
+  }, [isModalOpen]);
+
+  const handleApprovePending = async (id: string) => {
+    try {
+      const res = await fetch('/api/enrichment/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      if (res.ok) fetchPending();
+    } catch (err) {
+      console.error('Action failed', err);
+    }
+  };
+
+  const handleRejectPending = async (id: string) => {
+    try {
+      const res = await fetch('/api/enrichment/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      if (res.ok) fetchPending();
+    } catch (err) {
+      console.error('Action failed', err);
+    }
+  };
+
+  useEffect(() => {
+    let result = engineers.filter(e => {
+      const nameMatch = (e.name || '').toLowerCase().includes(search.toLowerCase());
+      const licenseMatch = (e.licenseNumber || '').toLowerCase().includes(search.toLowerCase());
+      return nameMatch || licenseMatch;
+    });
 
     if (filters.province) {
       result = result.filter(e => e.province === filters.province);
     }
     if (filters.speciality) {
-      result = result.filter(e => e.speciality.includes(filters.speciality));
+      result = result.filter(e => (e.speciality || '').includes(filters.speciality));
     }
     if (filters.hasEmail) {
       result = result.filter(e => !!e.email);
@@ -117,10 +263,31 @@ const AdminPanel: React.FC = () => {
           <div className="header-stats">
             Znaleziono: <strong>{filtered.length}</strong>
           </div>
-          <button className="export-btn">
-            <Download size={18} />
-            Eksportuj CSV
-          </button>
+          <div className="header-actions">
+            <div className="toggle-wrapper">
+              <span className="toggle-label">Wyszukiwanie AI w tle</span>
+              <label className="switch">
+                <input 
+                  type="checkbox" 
+                  checked={scriptStatus?.status === 'running'}
+                  onChange={handleToggleScript}
+                />
+                <span className="slider round"></span>
+              </label>
+            </div>
+            
+            <button className="enrich-status-btn" onClick={() => setIsModalOpen(true)}>
+              <div className="status-indicator-container">
+                <Activity size={18} />
+                {scriptStatus?.status === 'running' && <span className="running-indicator pulse-dot"></span>}
+              </div>
+              Status Wzbogacania
+            </button>
+            <button className="export-btn">
+              <Download size={18} />
+              Eksportuj CSV
+            </button>
+          </div>
         </header>
 
         <div className="table-wrapper">
@@ -197,6 +364,73 @@ const AdminPanel: React.FC = () => {
           </div>
         </footer>
       </main>
+
+      {/* MODAL RAPORTU WZBOGACANIA */}
+      {isModalOpen && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal">
+            <div className="admin-modal-header">
+              <div className="admin-modal-title">
+                <Activity size={24} className={scriptStatus?.status === 'running' ? "pulse-icon" : "offline-icon"} />
+                <h2>Raport z Wzbogacania Bazy w Tle</h2>
+              </div>
+              <button className="close-modal-btn" onClick={() => setIsModalOpen(false)}>
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="admin-modal-body">
+              {scriptStatus && (
+                <div className={`script-status-banner ${scriptStatus.status}`}>
+                  <div className="scprit-status-header">
+                    <span className={`status-dot ${scriptStatus.status}`}></span>
+                    <strong>{scriptStatus.status === 'running' ? 'Skrypt przeszukujący jest aktywny' : 'Skrypt przeszukujący jest zatrzymany'}</strong>
+                  </div>
+                  <p className="script-status-message">{scriptStatus.message}</p>
+                  <div className="script-status-time">Ostatnia aktywność: {new Date(scriptStatus.lastActive).toLocaleTimeString()}</div>
+                </div>
+              )}
+
+              <p className="modal-description">
+                Poniżej znajdują się oczekujące e-maile odnalezione przez sztuczną inteligencję w Internecie. 
+                Możesz je ręcznie <strong>Zatwierdzić</strong> lub <strong>Odrzucić</strong> zanim trafią do głównego zbioru.
+              </p>
+              
+              {pendingEnrichments.length === 0 ? (
+                <div className="no-logs">
+                  <p>Brak oczekujących maili w poczekalni.</p>
+                </div>
+              ) : (
+                <div className="logs-list">
+                  {pendingEnrichments.map((log, i) => (
+                    <div className="log-item" key={log.id || i}>
+                      <div className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</div>
+                      <div className="log-details">
+                        <span className="log-name">{log.name}</span>
+                        <span className="log-license">({log.license})</span>
+                      </div>
+                      <div className="log-email pending-email">{log.email}</div>
+                      <div className="log-actions">
+                        <button className="approve-btn" onClick={() => handleApprovePending(log.id)}>✓ Zatwierdź</button>
+                        <button className="reject-btn" onClick={() => handleRejectPending(log.id)}>✗ Odrzuć</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="admin-modal-footer">
+              <button className="primary-btn" onClick={() => {
+                setIsModalOpen(false);
+                window.location.reload(); // Refresh to see them in the main table
+              }}>
+                Odśwież widok tabeli
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

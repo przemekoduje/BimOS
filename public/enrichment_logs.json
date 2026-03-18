@@ -1,0 +1,14 @@
+[
+  {
+    "timestamp": "2026-03-18T07:44:00.000Z",
+    "name": "Jan Kowalski",
+    "license": "SLK/123/POOK/22",
+    "email": "jan.kowalski@budowa.pl"
+  },
+  {
+    "timestamp": "2026-03-18T06:50:00.000Z",
+    "name": "Anna Nowak",
+    "license": "SLK/456/POOK/15",
+    "email": "anna.nowak@inzynier-slask.com"
+  }
+]
