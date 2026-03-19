@@ -29,39 +29,65 @@ const getRandomDelay = () => Math.floor(Math.random() * (30000 - 15000 + 1) + 15
 // Proste wyrażenie regularne do wyciągania e-maili
 const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
 
-async function searchForEmail(query) {
-  try {
-    // Używamy prostej wersji HTML DuckDuckGo (mniejsza szansa na szybki bloking niż Google)
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'pl-PL,pl;q=0.8,en-US;q=0.5,en;q=0.3'
-      },
-      timeout: 10000
-    });
+async function fetchFromDuckLite(query) {
+  const url = `https://lite.duckduckgo.com/lite/`;
+  const response = await axios.post(url, `q=${encodeURIComponent(query)}`, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    timeout: 10000
+  });
+  return response.data;
+}
 
-    const html = response.data;
-    
-    // Szukamy wszystkich e-maili w zwróconym kodzie HTML (w fragmentach wyników)
-    const matches = html.match(emailRegex);
-    
-    if (matches && matches.length > 0) {
-      // Usuwamy duplikaty i potencjalne fałszywe maile (jakieś z dymków duckduckgo itp.)
-      const uniqueEmails = [...new Set(matches.map(e => e.toLowerCase()))];
-      // Proste filtrowanie oczywistych śmieci
-      const validEmails = uniqueEmails.filter(e => 
-        !e.includes('duckduckgo') && 
-        !e.includes('rating@') &&
-        !e.includes('example.com') &&
-        e.length > 6
-      );
+async function fetchFromYahoo(query) {
+  const url = `https://search.yahoo.com/search?p=${encodeURIComponent(query)}`;
+  const response = await axios.get(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    },
+    timeout: 10000
+  });
+  return response.data;
+}
+
+async function searchForEmail(query) {
+  const engines = [
+    { name: 'Yahoo', fetcher: fetchFromYahoo },
+    { name: 'DuckDuckGo Lite', fetcher: fetchFromDuckLite }
+  ];
+
+  for (const engine of engines) {
+    try {
+      const html = await engine.fetcher(query);
       
-      return validEmails.length > 0 ? validEmails[0] : null;
+      // Proste wyciągnięcie tekstu bez tagów HTML, by ułatwić szukanie regexem i uniknąć "poszarpanych" emaili
+      const cleanHtml = html.replace(/<[^>]*>?/gm, ' ');
+      const matches = cleanHtml.match(emailRegex);
+      
+      if (matches && matches.length > 0) {
+        const uniqueEmails = [...new Set(matches.map(e => e.toLowerCase()))];
+        const validEmails = uniqueEmails.filter(e => 
+          !e.includes('duckduckgo') && 
+          !e.includes('yahoo') &&
+          !e.includes('rating@') &&
+          !e.includes('example.com') &&
+          !e.endsWith('.png') &&
+          !e.endsWith('.jpg') &&
+          !e.endsWith('.gif') &&
+          e.length > 6
+        );
+        
+        if (validEmails.length > 0) {
+          // Jeśli znajdziemy poprawne maile w pierwszym lepszym silniku wyszukiwania, to zwracamy pierwszy znalezisko
+          return validEmails[0];
+        }
+      }
+    } catch (error) {
+      console.error(`Błąd przy wyszukiwaniu (${engine.name}) dla "${query}":`, error.message);
     }
-  } catch (error) {
-    console.error(`Błąd podczas wyszukiwania dla "${query}":`, error.message);
   }
   return null;
 }
@@ -103,8 +129,8 @@ async function enrichEngineers() {
 
       console.log(`[${i+1}/${data.length}] Szukam emaila dla: ${name} (${license || 'brak upr.'})`);
       
-      // Tworzymy precyzyjne zapytanie
-      const query = `"${name}" "uprawnienia budowlane" OR inżynier email kontakt`;
+      // Tworzymy precyzyjne i elastyczniejsze zapytanie
+      const query = `"${name}" inżynier email OR kontakt`;
       
       const foundEmail = await searchForEmail(query);
       

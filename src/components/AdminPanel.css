@@ -418,9 +418,9 @@ input:checked + .slider:before {
   background-color: #1e293b;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
+  width: 95%;
+  max-width: 900px;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
@@ -601,14 +601,32 @@ input:checked + .slider:before {
   font-size: 0.85rem;
 }
 
+.log-contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 250px;
+}
+
 .log-email {
   color: #10b981;
   font-weight: 500;
-  font-size: 0.95rem;
+  font-size: 0.90rem;
   background-color: rgba(16, 185, 129, 0.1);
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
   border: 1px solid rgba(16, 185, 129, 0.2);
+  display: inline-block;
+}
+
+.log-phone {
+  background-color: rgba(239, 68, 68, 0.1);
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  font-size: 0.90rem;
+  font-weight: 500;
+  display: inline-block;
 }
 
 .log-actions {

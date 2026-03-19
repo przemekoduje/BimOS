@@ -7,7 +7,8 @@ interface EnrichmentLog {
   timestamp: string;
   name: string;
   license: string;
-  email: string;
+  email?: string;
+  phone?: string;
 }
 
 interface EnrichmentStatus {
@@ -299,7 +300,6 @@ const AdminPanel: React.FC = () => {
                 <th>Nr Uprawnień</th>
                 <th>Miejscowość</th>
                 <th>Kontakt</th>
-                <th>Akcje</th>
               </tr>
             </thead>
             <tbody>
@@ -326,9 +326,6 @@ const AdminPanel: React.FC = () => {
                         </div>
                       )}
                     </div>
-                  </td>
-                  <td>
-                    <button className="action-btn">Wzbogać AI</button>
                   </td>
                 </tr>
               ))}
@@ -409,7 +406,10 @@ const AdminPanel: React.FC = () => {
                         <span className="log-name">{log.name}</span>
                         <span className="log-license">({log.license})</span>
                       </div>
-                      <div className="log-email pending-email">{log.email}</div>
+                      <div className="log-contact-info">
+                        {log.email && <div className="log-email pending-email">E-mail: {log.email}</div>}
+                        {log.phone && <div className="log-phone pending-phone" style={{color: '#ff6b6b'}}>Tel: {log.phone}</div>}
+                      </div>
                       <div className="log-actions">
                         <button className="approve-btn" onClick={() => handleApprovePending(log.id)}>✓ Zatwierdź</button>
                         <button className="reject-btn" onClick={() => handleRejectPending(log.id)}>✗ Odrzuć</button>

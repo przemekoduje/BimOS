@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { spawn } from 'child_process'
+import fs from 'fs'
 
 // Keep track of the running background process
 let enrichmentProcess = null;
@@ -74,12 +75,11 @@ const enrichmentControllerPlugin = () => ({
         req.on('end', () => {
           try {
             const { id } = JSON.parse(body);
-            const fs = require('fs');
             const pendingFile = 'public/enrichment_pending.json';
 
             if (fs.existsSync(pendingFile)) {
               let pendingList = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
-              pendingList = pendingList.filter(p => p.id !== id);
+              pendingList = pendingList.filter(p => String(p.id) !== String(id));
               fs.writeFileSync(pendingFile, JSON.stringify(pendingList, null, 2));
               
               res.statusCode = 200;
@@ -104,23 +104,22 @@ const enrichmentControllerPlugin = () => ({
         req.on('end', () => {
           try {
             const { id } = JSON.parse(body);
-            const fs = require('fs');
             const pendingFile = 'public/enrichment_pending.json';
             const dataFile = 'engineers_data.json';
             const publicDataFile = 'public/engineers_data.json';
 
             if (fs.existsSync(pendingFile) && fs.existsSync(dataFile)) {
               let pendingList = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
-              const approvedItem = pendingList.find(p => p.id === id);
+              const approvedItem = pendingList.find(p => String(p.id) === String(id));
               
               if (approvedItem) {
                 // Usun z pending
-                pendingList = pendingList.filter(p => p.id !== id);
+                pendingList = pendingList.filter(p => String(p.id) !== String(id));
                 fs.writeFileSync(pendingFile, JSON.stringify(pendingList, null, 2));
 
                 // Zapisz do main db
                 let mainData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-                const engineerIndex = mainData.findIndex(e => e.id === id);
+                const engineerIndex = mainData.findIndex(e => String(e.id) === String(id));
                 
                 if (engineerIndex !== -1) {
                   if (!mainData[engineerIndex].attributes.contact_data) {
@@ -128,7 +127,12 @@ const enrichmentControllerPlugin = () => ({
                   } else if (!mainData[engineerIndex].attributes.contact_data.address) {
                     mainData[engineerIndex].attributes.contact_data.address = {};
                   }
-                  mainData[engineerIndex].attributes.contact_data.address.email_address = approvedItem.email;
+                  if (approvedItem.email) {
+                    mainData[engineerIndex].attributes.contact_data.address.email_address = approvedItem.email;
+                  }
+                  if (approvedItem.phone) {
+                    mainData[engineerIndex].attributes.contact_data.address.phone_number = approvedItem.phone;
+                  }
                   
                   fs.writeFileSync(dataFile, JSON.stringify(mainData, null, 2));
                   fs.writeFileSync(publicDataFile, JSON.stringify(mainData, null, 2));
