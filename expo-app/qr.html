@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Expo QR Code</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #121212;
+            color: white;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 20px solid white;
+            border-radius: 10px;
+        }
+        .url {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Zeskanuj kod w Expo Go</h1>
+    <canvas id="canvas"></canvas>
+    <div class="url">exp://xclojxs-anonymous-8081.exp.direct</div>
+    <script>
+        QRCode.toCanvas(document.getElementById('canvas'), 'exp://xclojxs-anonymous-8081.exp.direct', {
+            width: 400,
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
+        }, function (error) {
+            if (error) console.error(error)
+            console.log('success!');
+        })
+    </script>
+</body>
+</html>

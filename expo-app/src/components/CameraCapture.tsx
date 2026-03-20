@@ -64,7 +64,7 @@ export default function CameraCapture({ onBack, onFinish }: CameraCaptureProps) 
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{captures.length}</Text>
         </View>
-      </div>
+        </View>
 
       <View style={styles.actionArea}>
         <TouchableOpacity style={styles.captureBtn} onPress={handleCapture}>

@@ -1,5 +1,6 @@
 {
   "expo": {
+    "sdkVersion": "55.0.0",
     "name": "expo-app",
     "slug": "expo-app",
     "version": "1.0.0",

@@ -1,21 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, StatusBar, Platform } from 'react-native';
-import InspectionModule from './src/components/InspectionModule';
-
-// Placeholder components for migrated Hero and Admin
-const SearchHero = () => (
-  <View style={styles.placeholder}>
-    <Text style={styles.placeholderText}>Wyszukiwarka Inżynierów (Wersja Mobilna)</Text>
-    <Text style={styles.placeholderSub}>Tutaj pojawi się wyszukiwarka zoptymalizowana pod telefon.</Text>
-  </View>
-);
-
-const AdminPanel = () => (
-  <View style={styles.placeholder}>
-    <Text style={styles.placeholderText}>Panel Administratora</Text>
-    <Text style={styles.placeholderSub}>Zarządzanie bazą z poziomu aplikacji.</Text>
-  </View>
-);
+// import SearchHero from './src/components/SearchHero';
+// import AdminPanel from './src/components/AdminPanel';
+// import InspectionModule from './src/components/InspectionModule';
 
 export default function App() {
   const [view, setView] = useState<'search' | 'admin' | 'inspections'>('search');
@@ -38,9 +25,10 @@ export default function App() {
       </View>
 
       <View style={styles.main}>
-        {view === 'search' && <SearchHero />}
-        {view === 'admin' && <AdminPanel />}
-        {view === 'inspections' && <InspectionModule />}
+        <Text style={{ textAlign: 'center', marginTop: 20 }}>Components disabled for debugging. View: {view}</Text>
+        {/* {view === 'search' && <SearchHero />} */}
+        {/* {view === 'admin' && <AdminPanel />} */}
+        {/* {view === 'inspections' && <InspectionModule />} */}
       </View>
     </SafeAreaView>
   );
