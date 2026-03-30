@@ -47,8 +47,8 @@ class VoiceService {
     });
   }
 
-  async analyzeVoice(audioB64: string) {
-    return await processVoiceLog(audioB64);
+  async analyzeVoice(audioB64: string, context?: string) {
+    return await processVoiceLog(audioB64, undefined, context);
   }
 
   /**

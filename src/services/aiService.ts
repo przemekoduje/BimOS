@@ -4,7 +4,18 @@
  */
 
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
-const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+
+
+import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+
+// pdfjs worker setup
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+}
 
 export interface VerificationResult {
   status: 'SUCCESS' | 'WARNING' | 'ERROR';
@@ -23,6 +34,28 @@ export interface VerificationResult {
     validUntil: string;
     isCurrent: boolean;
   };
+}
+
+export interface PreInspectionContext {
+  building_age_t: number;
+  structural_material: "concrete" | "brick" | "steel";
+  historical_defects: {
+    pillar: string; 
+    desc: string;
+    loc: string;
+    urgency: "High" | "Critical" | "Normal";
+    status: "pending";
+    verification_question: string;
+  }[];
+  missing_compliance: string[];
+  structural_alerts: string[];
+  technical_specs: {
+    last_inspector_name: string;
+    last_inspector_license: string;
+    last_inspection_date: string;
+    roof_type: string;
+  };
+  spatial_markers: string[];
 }
 
 /**
@@ -139,6 +172,55 @@ Zwróć JSON:
 }
 `;
 
+/**
+ * System prompt for Ingestion and Document Mapping (Step 1 - Total Recall Edition)
+ */
+export const PRE_INSPECTION_PROMPT = `
+ROLE: Exhaustive Technical Data Scraper / Senior Building Inspector.
+OBJECTIVE: Perform "Total Recall Extraction" of technical data from building protocols. 
+
+INSTRUCTIONS:
+1. READ EVERY WORD: Do not summarize. Do not skip rows. 
+2. SEARCH FOR NEGATIVES: Identify any mention of: "zły stan", "uszkodzone", "brak", "niekompletna", "nieszczelna", "pęknięcia", "odparzenia", "do wymiany", "zalecana naprawa".
+3. NO HALLUCINATIONS: Only extract what is explicitly written in the text.
+
+DATA STRUCTURE:
+- historical_defects: List EVERY technical flaw. Use a new object for each finding.
+  - pillar: Mapping to (Fundamenty, Konstrukcja, Elewacja, Dach, Odwodnienie, Stolarka, Dodatki, Otoczenie).
+  - desc: FULL DESCRIPTION from text.
+  - loc: Exact location or context.
+  - urgency: "High" (Safety/Structural), "Normal" (Maintenance).
+  - verification_question: Pytanie do inżyniera w terenie (np. "Czy pęknięcie elewacji przy oknie na 2 piętrze zostało naprawione?").
+
+- missing_compliance: Comprehensive list of missing protocols or incomplete installations.
+
+- structural_alerts: Critical risks found in remarks (Section VII) or general descriptions.
+
+- technical_specs:
+  - last_inspector_name
+  - last_inspector_license
+  - last_inspection_date
+  - roof_type
+
+Zwróć JSON:
+{
+  "building_age_t": number,
+  "structural_material": "concrete" | "brick" | "steel",
+  "historical_defects": [
+    { "pillar": "str", "desc": "str", "loc": "str", "urgency": "High"|"Normal", "status": "pending", "verification_question": "str" }
+  ],
+  "missing_compliance": ["string"],
+  "structural_alerts": ["string"],
+  "technical_specs": {
+    "last_inspector_name": "string",
+    "last_inspector_license": "string",
+    "last_inspection_date": "string",
+    "roof_type": "string"
+  },
+  "spatial_markers": ["nazwy osi i pomieszczeń"]
+}
+`;
+
 export async function verifyConstruction(imageB64: string): Promise<VerificationResult> {
   return callGemini(imageB64, CONSTRUCTION_VERIFICATION_PROMPT);
 }
@@ -168,6 +250,110 @@ export async function processVoiceLog(audioB64: string, textOverride?: string, c
 }
 
 /**
+ * Step 1: Process Pre-Inspection Documents (Total Recall - Text + Vision context)
+ */
+export async function processPreInspectionDocuments(files: File[]): Promise<PreInspectionContext> {
+  let fullText = "";
+  const imagesB64: string[] = [];
+
+  for (const file of files) {
+    if (file.type === 'application/pdf') {
+       // Deep extraction of text layer
+       const text = await extractPDFFullText(file);
+       fullText += `--- PDF CONTENT (${file.name}) ---\n${text}\n\n`;
+       
+       // Optional: Still extract first pages images for VISUAL STAMPS/SIGNATURES context
+       const pdfImages = await extractPDFPagesAsImages(file, 3);
+       imagesB64.push(...pdfImages);
+    } else if (file.type.startsWith('image/')) {
+      const b64 = await fileToBase64(file);
+      imagesB64.push(b64);
+    }
+  }
+
+  // Use Gemini 2.0 Flash for massive context and 100% recall
+  const result = await callGemini(imagesB64[0] || "", PRE_INSPECTION_PROMPT, "image/jpeg", fullText);
+
+  return {
+    building_age_t: result.building_age_t || 0,
+    structural_material: result.structural_material || "concrete",
+    historical_defects: result.historical_defects || [],
+    missing_compliance: result.missing_compliance || [],
+    structural_alerts: result.structural_alerts || [],
+    technical_specs: result.technical_specs || {
+      last_inspector_name: "",
+      last_inspector_license: "",
+      last_inspection_date: "",
+      roof_type: ""
+    },
+    spatial_markers: result.spatial_markers || []
+  };
+}
+
+/**
+ * Helper: Convert File to Base64
+ */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * NEW: Extract Full Text Layer from PDF (Zero omission)
+ */
+async function extractPDFFullText(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items.map((item: any) => item.str);
+    fullText += `PAGE ${i}:\n${strings.join(' ')}\n\n`;
+  }
+
+  return fullText;
+}
+
+/**
+ * Helper: Extract PDF pages as images using pdfjs-dist
+ */
+async function extractPDFPagesAsImages(file: File, maxPagesLimit: number = 20): Promise<string[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const images: string[] = [];
+
+  const maxPages = Math.min(pdf.numPages, maxPagesLimit);
+
+  for (let i = 1; i <= maxPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
+    if (context) {
+      await page.render({ canvasContext: context, viewport }).promise;
+      images.push(canvas.toDataURL('image/jpeg', 0.8));
+    }
+  }
+
+  return images;
+}
+
+/**
+ * Helper: Delay execution (ms)
+ */
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+
+/**
  * Generic helper to call Gemini
  */
 async function callGemini(
@@ -185,24 +371,46 @@ async function callGemini(
   if (textOverride) parts.push({ text: `TRANSCRIPT TO PROCESS: ${textOverride}` });
   if (dataB64) {
     const base64Data = dataB64.split(',')[1] || dataB64;
-    parts.push({ inline_data: { mime_type: mimeType, data: base64Data } });
+    parts.push({ inlineData: { mimeType: mimeType, data: base64Data } });
   }
 
-  try {
-    const response = await fetch(`${API_URL}?key=${API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { response_mime_type: "application/json" }
-      }),
-    });
+  const maxRetries = 3;
+  let retryCount = 0;
 
-    const data = await response.json();
-    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return resultText ? JSON.parse(resultText) : { status: 'ERROR', findings: ["Błąd parsowania AI"], recommendation: "" };
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    return { status: 'ERROR', findings: [String(error)], recommendation: "" };
+  while (retryCount < maxRetries) {
+    try {
+      const response = await fetch(`${API_URL}?key=${API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseMimeType: "application/json" }
+        }),
+      });
+
+      if (response.status === 429) {
+        retryCount++;
+        const waitTime = Math.pow(2, retryCount) * 1000;
+        console.warn(`Gemini 429 (Too Many Requests). Retry ${retryCount}/${maxRetries} in ${waitTime}ms...`);
+        await delay(waitTime);
+        continue;
+      }
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || "Gemini API Error");
+      }
+
+      const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      return resultText ? JSON.parse(resultText) : { status: 'ERROR', findings: ["Błąd parsowania AI"], recommendation: "" };
+    } catch (error) {
+      if (retryCount >= maxRetries - 1) {
+        console.error("Gemini Final Error after retries:", error);
+        return { status: 'ERROR', findings: [String(error)], recommendation: "Przekroczono limity API. Spróbuj ponownie za chwilę." };
+      }
+      retryCount++;
+      await delay(1000);
+    }
   }
 }

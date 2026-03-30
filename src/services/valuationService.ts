@@ -39,6 +39,18 @@ export const DURABILITY_TABLE = {
 } as const;
 
 /**
+ * Resolves normative durability (T) based on structural material
+ */
+export function resolveMaterialDurability(material: string): number {
+  const m = material.toLowerCase();
+  if (m.includes('brick') || m.includes('cegła')) return 150; // High durability for masonry
+  if (m.includes('concrete') || m.includes('żelbet')) return 150;
+  if (m.includes('steel') || m.includes('stal')) return 120;
+  if (m.includes('wood') || m.includes('drewno')) return 80;
+  return DURABILITY_TABLE.KONSTRUKCJA_NOSNA; // Default
+}
+
+/**
  * Default cost participation (Ai) for each of the 8 pillars (%)
  * Values based on common technical standards for residential buildings.
  */

@@ -1,24 +1,55 @@
 import { useState } from 'react';
 import CameraCapture from './CameraCapture';
 import { voiceService } from '../services/voiceService';
+import { processPreInspectionDocuments } from '../services/aiService';
+import type { PreInspectionContext } from '../services/aiService';
+import { inspectionStore } from '../services/inspectionStore';
+import { resolveMaterialDurability, calculateRossaWear } from '../services/valuationService';
 import './InspectionModule.css';
 
 export default function InspectionModule() {
-  const [activeTab, setActiveTab] = useState<'list' | 'new' | 'camera' | 'review' | 'voice'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'new' | 'camera' | 'review' | 'voice' | 'summary'>('list');
   const [inspectionData, setInspectionData] = useState<any[]>([]);
   const [voiceStep, setVoiceStep] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceResults, setVoiceResults] = useState<any[]>([]);
   const [piibId, setPiibId] = useState('PIIB-ID-39120');
-  const [archivalContext, setArchivalContext] = useState("W 2024 r. w Osi B-4 wykryto nieszczelność rynny.");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [context, setContext] = useState<PreInspectionContext | null>(null);
+  const [rossaWear, setRossaWear] = useState<number>(0);
 
   const handleMockVoice = async (text: string) => {
     try {
-      const result = await voiceService.simulateVoiceAnalysis(text, archivalContext);
+      const histContext = inspectionStore.getChecklist().map(i => i.description).join(". ");
+      const result = await voiceService.simulateVoiceAnalysis(text, histContext);
       setVoiceResults(prev => [...prev, result]);
       if (voiceStep < 3) setVoiceStep(prev => prev + 1);
     } catch (err) {
       alert("Błąd analizy tekstu.");
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsAnalyzing(true);
+    try {
+      const result = await processPreInspectionDocuments(Array.from(files));
+      setContext(result);
+      
+      const unverified = !inspectionStore.verifyProfessionalCredentials(result);
+      inspectionStore.setContext(result, unverified);
+      
+      const durability = resolveMaterialDurability(result.structural_material);
+      const wear = calculateRossaWear({ age: result.building_age_t, durability });
+      setRossaWear(wear);
+      
+      setActiveTab('summary');
+    } catch (err: any) {
+      alert(`Błąd ingestii: ${err.message}`);
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -55,7 +86,7 @@ export default function InspectionModule() {
               setActiveTab('voice');
               setVoiceStep(1);
             }}
-          >🎙️ Asystent Głosowy (Hands-Free)</button>
+          >Asystent Głosowy (Hands-Free)</button>
         </div>
       </div>
 
@@ -70,24 +101,143 @@ export default function InspectionModule() {
         {activeTab === 'new' && (
           <div className="new-inspection-wizard">
             <div className="wizard-card">
-              <h3>Krok 1: Wgraj archiwalny protokół (PDF)</h3>
+              <h3>Krok 1: Wgraj archiwalny protokół (PDF/Obrazy)</h3>
               <p className="wizard-desc">
                 AI wyekstrahuje zalecenia historyczne (Art. 62) i przygotuje plan kontroli dla 8 filarów budowlanych.
               </p>
               <div className="upload-area">
-                <label className="upload-btn">
-                  Wybierz plik PDF
-                  <input type="file" accept=".pdf" style={{ display: 'none' }} />
-                </label>
-                <button className="secondary-btn" onClick={() => setArchivalContext("W 2024 r. w Osi C-12 wykryto rdzę na prętach zbrojeniowych.")}>
-                  Symuluj Analizę PDF (Nowy Kontekst)
-                </button>
+                {isAnalyzing ? (
+                  <div className="analyzing-state">
+                    <div className="spinner"></div>
+                    <p>Trwa multimodalna analiza dokumentacji...</p>
+                  </div>
+                ) : (
+                  <label className="upload-btn">
+                    Wybierz pliki (PDF/JPG)
+                    <input type="file" multiple accept=".pdf,image/*" style={{ display: 'none' }} onChange={handleFileUpload} />
+                  </label>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'summary' && context && (
+          <div className="building-profile-summary">
+            <div className="profile-header success">
+              <h3>Building Profile Loaded</h3>
+              <p>Dokumentacja zintegrowana z "Pamięcią Obiektu".</p>
+            </div>
+
+            <div className="summary-grid">
+              <div className="summary-item">
+                <span className="label">Usterki Historyczne:</span>
+                <span className="value">{context.historical_defects.length} do weryfikacji</span>
+              </div>
+              <div className="summary-item">
+                <span className="label">Znaczniki Przestrzenne:</span>
+                <span className="value">{context.spatial_markers.length} osi/stref</span>
+              </div>
+              <div className="summary-item">
+                <span className="label">Materiał Nośny:</span>
+                <span className="value">{context.structural_material === 'concrete' ? 'Żelbet' : 'Cegła/Mur'}</span>
+              </div>
+              <div className="summary-item">
+                <span className="label">Zużycie Techniczne:</span>
+                <span className="value">{rossaWear}% (Metoda Rossa)</span>
+              </div>
+            </div>
+
+            {inspectionStore.isUnverified() && (
+              <div className="warning-box">
+                WYKRYTO NIEZWERYFIKOWANĄ HISTORIĘ: Brak pieczątki inżyniera na Stronie 17.
+              </div>
+            )}
+
+            {inspectionStore.getStructuralAlerts().length > 0 && (
+              <div className="structural-alerts-box">
+                <h4>ALERTY STRUKTURALNE (Ryzyka Nieliniowe)</h4>
+                <ul>
+                  {inspectionStore.getStructuralAlerts().map((alert, idx) => (
+                    <li key={idx}>{alert}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="continuity-validator">
+              <span className="continuity-label">Walidacja Kontynuitetu (Art. 62):</span>
+              <span className="continuity-value">
+                Poprzedni Inspektor: <strong>{context.technical_specs.last_inspector_name || "Nieznany"}</strong> 
+                (Uprawnienia: {context.technical_specs.last_inspector_license || "Brak"})
+              </span>
+            </div>
+
+            <div className="summary-tables">
+              <div className="summary-section">
+                <h4>1. Hard Extraction: Rejestr Usterek i Wad</h4>
+                <table className="analysis-table">
+                  <thead>
+                    <tr>
+                      <th>Filar</th>
+                      <th>Symptom (Fakt Techniczny)</th>
+                      <th>Lokalizacja</th>
+                      <th>Pytanie do weryfikacji</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {context.historical_defects.map((defect, idx) => (
+                      <tr key={idx} className={defect.urgency === 'Critical' || defect.urgency === 'High' ? 'mandatory' : ''}>
+                        <td>{defect.pillar}</td>
+                        <td className="technical-fact">{defect.desc}</td>
+                        <td>{defect.loc}</td>
+                        <td>{defect.verification_question}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="summary-section">
+                <h4>2. Inwentaryzacja Braków (Compliance)</h4>
+                <table className="analysis-table compliance">
+                  <thead>
+                    <tr>
+                      <th>Stwierdzony Brak / Wada Formalna</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {context.missing_compliance.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="issue">{item}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="summary-section">
+                <h4>3. Parametry Techniczne & Zalecenia Historyczne</h4>
+                <div className="tech-specs-grid">
+                  <div className="spec-card">
+                    <span className="spec-label">Ostatni Inspektor (Uprawnienia):</span>
+                    <span className="spec-value">{context.technical_specs.last_inspector_license || "Brak danych"}</span>
+                  </div>
+                  <div className="spec-card">
+                    <span className="spec-label">Data poprzedniej kontroli:</span>
+                    <span className="spec-value">{context.technical_specs.last_inspection_date || "Nieznana"}</span>
+                  </div>
+                  <div className="spec-card">
+                    <span className="spec-label">Rodzaj dachu:</span>
+                    <span className="spec-value">{context.technical_specs.roof_type || "Nie określono"}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="wizard-actions">
               <button className="primary-btn start-camera-btn" onClick={() => setActiveTab('camera')}>
-                Rozpocznij Wizję Lokalną 📸
+                Rozpocznij Wizję Lokalną
               </button>
             </div>
           </div>
@@ -108,7 +258,7 @@ export default function InspectionModule() {
             <h3>Podsumowanie Oględzin AI</h3>
             
             <section className="review-section">
-              <h4>🏗️ Stan Konstrukcji (8 Filarów)</h4>
+              <h4>Stan Konstrukcji (8 Filarów)</h4>
               <div className="pillars-grid">
                 {[1,2,3,4,5,6,7,8].map(p => {
                   const items = groupFindingsByPillar()[p] || [];
@@ -124,7 +274,7 @@ export default function InspectionModule() {
             </section>
 
             <section className="review-section">
-              <h4>📄 Protokoły Branżowe</h4>
+              <h4>Protokoły Branżowe</h4>
               <div className="protocols-list">
                 {getProtocols().length === 0 ? <p className="empty-hint">Nie załączono protokołów branżowych.</p> : (
                   getProtocols().map((proto, idx) => (
@@ -139,7 +289,7 @@ export default function InspectionModule() {
             </section>
 
             <section className="review-section">
-              <h4>🛠️ Draft c-KOB (JSON)</h4>
+              <h4>Draft c-KOB (JSON)</h4>
               <pre className="json-preview">
                 {JSON.stringify({
                   metadata: { date: new Date().toLocaleDateString(), inspector: "Senior Developer (Test)" },
@@ -166,22 +316,28 @@ export default function InspectionModule() {
                   placeholder="Numer uprawnień PIIB"
                   className="signature-input"
                 />
-                <span>Wpis w PIIB zweryfikowany: ✅ AKTUALNY</span>
+                <span>Wpis w PIIB zweryfikowany: AKTUALNY</span>
               </div>
             </section>
 
             <div className="final-actions">
-              <button className="finish-inspection-btn" onClick={() => {
-                alert("Protokół wyeksportowany do c-KOB!");
-                setActiveTab('list');
-              }}>Generuj Protokół Końcowy 📄</button>
+              {inspectionStore.getChecklist().some(i => i.is_mandatory && i.status === 'pending') ? (
+                <div className="validation-lock-msg">
+                  PRZYCISK ZABLOKOWANY: Musisz zweryfikować wszystkie usterki historyczne w module głosowym lub kamerze przed zamknięciem raportu.
+                </div>
+              ) : (
+                <button className="finish-inspection-btn" onClick={() => {
+                  alert("Protokół wyeksportowany do c-KOB!");
+                  setActiveTab('list');
+                }}>Generuj Protokół Końcowy</button>
+              )}
             </div>
           </div>
         )}
         {activeTab === 'voice' && (
           <div className="voice-assistant-container">
             <div className="voice-card">
-              <div className="voice-avatar">🤖</div>
+              <div className="voice-avatar">AI</div>
               <div className="voice-dialogue">
                 {voiceStep === 1 && <h3>"Czy zalecenie dotyczące naprawy rynien z poprzedniego roku zostało wykonane?"</h3>}
                 {voiceStep === 2 && <h3>"Opisz aktualną obserwację (np. odkrywka fundamentów w osi A)."</h3>}
@@ -203,20 +359,20 @@ export default function InspectionModule() {
                   {voiceStep === 1 && (
                     <>
                       <button className="mock-btn" onClick={() => handleMockVoice("Tak, zalecenie dotyczące naprawy rynien z 2024 zostało wykonane.")}>
-                        ✅ Rynny Naprawione (Happy Path)
+                        Rynny Naprawione (Happy Path)
                       </button>
                       <button className="mock-btn" onClick={() => handleMockVoice("Nie, nie wykonano naprawy rynien. Wciąż widoczne ślady przecieków.")}>
-                        ❌ Brak Naprawy
+                        Brak Naprawy
                       </button>
                     </>
                   )}
                   {voiceStep === 2 && (
                     <>
                       <button className="mock-btn" onClick={() => handleMockVoice("W osi A wykonano odkrywkę fundamentów. Brak zawilgocenia, izolacja w dobrym stanie.")}>
-                        🏗️ Fundamenty OK
+                        Fundamenty OK
                       </button>
                       <button className="mock-btn" onClick={() => handleMockVoice("Widoczne drobne zarysowanie tynku nad drzwiami w pokoju 204. Filar 6.")}>
-                        🧱 Rysa nad drzwiami
+                        Rysa nad drzwiami
                       </button>
                     </>
                   )}
@@ -233,7 +389,10 @@ export default function InspectionModule() {
                         setIsRecording(false); // Set early for UX
                         const audio = await voiceService.stopRecording();
                         if (!audio) throw new Error("Brak nagrania");
-                        const result = await voiceService.analyzeVoice(audio);
+                        
+                        const histContext = inspectionStore.getChecklist().map(i => i.description).join(". ");
+                        const result = await voiceService.analyzeVoice(audio, histContext);
+                        
                         setVoiceResults(prev => [...prev, result]);
                         if (voiceStep < 3) setVoiceStep(prev => prev + 1);
                       }
@@ -243,7 +402,7 @@ export default function InspectionModule() {
                     }
                   }}
                 >
-                  {isRecording ? '⏹️ Przestań Nagrywać' : '🎙️ Odpowiedz Głosowo'}
+                  {isRecording ? 'Przestań Nagrywać' : 'Odpowiedz Głosowo'}
                 </button>
                 <p className="voice-hint">
                   {isRecording ? 'Mów teraz... AI rozpozna terminy techniczne.' : 'AI prowadzi Cię przez protokół Hands-Free.'}
@@ -251,7 +410,7 @@ export default function InspectionModule() {
               </div>
               
               {voiceStep === 3 && (
-                <button className="primary-btn" onClick={() => setActiveTab('camera')}>Przejdź do Zdjęć 📸</button>
+                <button className="primary-btn" onClick={() => setActiveTab('camera')}>Przejdź do Zdjęć</button>
               )}
             </div>
           </div>

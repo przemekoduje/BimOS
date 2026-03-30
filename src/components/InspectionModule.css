@@ -169,61 +169,129 @@
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-/* c-KOB & Safety Styles */
+/* Minimalistyczne style dokumentów i sekcji przeglądu (Clean Aesthetic) */
 .json-preview {
-  background: #1e293b;
-  color: #38bdf8;
-  padding: 1rem;
+  background: #f8fafc;
+  color: #475569;
+  padding: 1.5rem;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   overflow-x: auto;
-  max-height: 300px;
+  max-height: 350px;
+  border: 1px solid #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .safety-statement-card {
-  margin-top: 2rem;
-  background: #fdf2f2;
-  border: 1px solid #fee2e2;
+  margin-top: 1.5rem;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   padding: 1.5rem;
-  border-radius: 12px;
-  color: #991b1b;
+  border-radius: 6px;
+  color: #334155;
+}
+
+.profile-header {
+  margin-bottom: 1.5rem;
+}
+
+.profile-header h3 {
+  color: #0f172a;
+  margin: 0 0 0.25rem 0;
+  font-size: 1.25rem;
+}
+
+.profile-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.summary-item {
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.summary-item .label {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.summary-item .value {
+  font-size: 1.05rem;
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.warning-box {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
 }
 
 .safety-statement-card h4 {
-  color: #b91c1c;
+  color: #0f172a;
   margin-top: 0;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1.5rem;
 }
 
 .safety-statement-card p {
-  font-style: italic;
-  font-size: 1rem;
-  line-height: 1.5;
+  font-style: normal;
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
 
-.safety-statement-card .safe { color: #059669; }
-.safety-statement-card .danger { color: #dc2626; text-decoration: underline; }
+.safety-statement-card .safe { color: #10b981; font-weight: 600; }
+.safety-statement-card .danger { color: #ef4444; font-weight: 600; text-decoration: none; }
 
 .inspector-signature {
-  margin-top: 1rem;
+  margin-top: 3rem;
   text-align: right;
-  font-family: 'Courier New', Courier, monospace;
-  font-weight: bold;
-  color: #1e293b;
+  color: #475569;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .signature-input {
   border: none;
-  border-bottom: 2px dashed #94a3b8;
+  border-bottom: 1px solid #cbd5e1;
   background: transparent;
   text-align: right;
   font-family: inherit;
-  font-size: 1.1rem;
-  color: #1e293b;
-  width: 250px;
+  font-size: 1rem;
+  color: #0f172a;
+  width: 280px;
+  padding-bottom: 0.5rem;
+  transition: border-color 0.2s;
+}
+
+.signature-input:focus {
+  outline: none;
+  border-bottom-color: #0f172a;
 }
 
 /* Voice Assistant Styles */
@@ -468,4 +536,168 @@
 .finish-inspection-btn:hover {
   background: #2563eb;
   transform: translateY(-2px);
+}
+/* Engineering Matrix Styles (Czysty, nowoczesny dokument) */
+.summary-tables {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  margin-top: 2rem;
+}
+
+.summary-section h4 {
+  color: #0f172a;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.95rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.analysis-table th {
+  background: #f8fafc;
+  text-align: left;
+  padding: 1rem 1.25rem;
+  color: #475569;
+  font-weight: 500;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.analysis-table td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.analysis-table tr:last-child td {
+  border-bottom: none;
+}
+
+.analysis-table tr.mandatory td {
+  background: #fafafa;
+}
+
+.analysis-table td.quote {
+  font-family: inherit;
+  color: #475569;
+  background: #f8fafc;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.analysis-table.compliance td.issue {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.tech-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.spec-card {
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.spec-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.spec-value {
+  font-size: 1.05rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.validation-lock-msg {
+  background: #ffffff;
+  color: #ef4444;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  font-weight: 500;
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Hard Extraction Styles */
+.structural-alerts-box {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  color: #334155;
+}
+
+.structural-alerts-box h4 {
+  margin-top: 0;
+  color: #0f172a;
+  font-size: 1.05rem;
+  margin-bottom: 1.25rem;
+}
+
+.structural-alerts-box ul {
+  margin: 0 0 0 1.25rem;
+  padding: 0;
+}
+
+.structural-alerts-box li {
+  margin-bottom: 0.5rem;
+}
+
+.continuity-validator {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.continuity-label {
+  font-weight: 600;
+  color: #64748b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.continuity-value {
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.technical-fact {
+  font-weight: 500;
+  color: #0f172a;
 }
