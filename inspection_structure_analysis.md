@@ -10,35 +10,34 @@ This document synthesizes findings from archival homeowner resources, profession
 | `K-02 Template` | Professional | Legal Compliance | Art. 62 layout for buildings > 2000m² |
 | `BimOS Strategy` | Strategic | AI Integration | "Data-driven" approach, analog tool digital twins |
 
-## 2. Synthesized Inspection Schema (AI-Ready)
+## 2. Synthesized Inspection Schema (Construction Focused)
 
-The AI engine will be trained/prompted to extract and categorize data from archival PDFs (and future media) into the following professional structure:
+The module now focuses on the **architectural and structural** integrity, while installations are recorded as external protocol statuses.
 
-### Phase A: Metadata & Historical Context
-- **Control Scope**: Previous recommendations status, legal basis (Art. 62).
-- **Object Context**: Structural type (steel, masonry, etc.), installation equipment.
-- **Archive Link**: Mapping findings to previous protocol IDs/dates.
+### Phase B: Technical Assessment (8 Construction Pillars)
+1. **Fundamenty i Piwnice**: Ściany fundamentowe, izolacje przeciwwilgociowe, posadzki piwnic.
+2. **Konstrukcja Nośna**: Ściany nośne, słupy, podciągi, stropy.
+3. **Ściany Zewnętrzne i Elewacja**: Tynki, okładziny, docieplenie, gzymsy, detale.
+4. **Dach i Pokrycie**: Konstrukcja więźby, pokrycie, świetliki, wyłazy.
+5. **Odwodnienie Obiektu**: Rynny, rury spustowe, izolacje tarasów, obróbki blacharskie.
+6. **Stolarka i Ślusarka**: Okna (części wspólne), drzwi wejściowe, bramy, balustrady.
+7. **Elementy Dodatkowe**: Reklamy, jednostki AC, anteny, maszty.
+8. **Otoczenie i Zagospodarowanie**: Opaski, chodniki przy budynku, schody zewnętrzne, murki oporowe.
 
-### Phase B: Technical Assessment (8 Core Pillars)
-1. **External Envelopes**: Plasters, claddings, external wall elements (balconies, gzymsy).
-2. **Structural Integrity**: Cracks (>5mm), settlement indicators, wall/roof attachments.
-3. **Roofing & Drainage**: Cover status, chimneys, gutters, flashings.
-4. **Sanitary & Environmental**: Sewage, drainage, filter systems, noise reduction.
-5. **Gas Systems**: Safety checks, leak detection.
-6. **Chimney & Ventilation**: Gravity vs. mechanical, industrial chimneys.
-7. **Installations**: Electrical, heating, plumbing (based on `Awarie.pdf` logic).
-8. **Exterior Elements**: Advertisements, AC units, antennas.
-
-### Phase C: Results & Strategic Action
-- **Repair Schedule**: Recommended works prioritized by safety/cost.
-- **Safety Conclusion**: 6-level scale (from "safe" to "immediate demolition").
-- **Evidence Management**: Mapping photos/videos to specific protocol sections.
+### Phase C: Review of Installation Protocols (Separate Section)
+Instead of detailed assessment, we record the **validity and summary findings** of specialist protocols:
+- **Instalacja Elektryczna i Odgromowa**: (Ważność, opis problemów).
+- **Instalacja Gazowa**: (Ważność, opis problemów).
+- **Przewody Kominowe (Spalinowe/Wentylacyjne)**: (Ważność, opis problemów).
+- **Systemy ppoż.**: (Jeśli dotyczy).
 
 ## 3. Recommended AI Processing Workflow
 
 1.  **Ingestion**: User uploads archival PDF or photos.
-2.  **Mapping**: AI identifies which section (Pillars 1-8) the content belongs to.
-3.  **Extraction**: AI pulls quantitative data (dimensions, dates) and qualitative (status).
+2.  **Mapping**: AI identifies which section (Pillars 1-8 or Protocols) the content belongs to.
+3.  **Extraction**: 
+    - For Pillars: AI pulls quantitative data and identifies defects.
+    - For Protocols: AI pulls dates and "Valid/Invalid" status from archival signatures.
 4.  **Verification**: AI flags "missing information" based on the Art. 62 template.
 5.  **Drafting**: AI pre-fills the `InspectionModule` UI for human supervisor approval.
 

@@ -1,9 +1,40 @@
 import { useState } from 'react';
 import CameraCapture from './CameraCapture';
+import { voiceService } from '../services/voiceService';
 import './InspectionModule.css';
 
 export default function InspectionModule() {
-  const [activeTab, setActiveTab] = useState<'list' | 'new' | 'camera'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'new' | 'camera' | 'review' | 'voice'>('list');
+  const [inspectionData, setInspectionData] = useState<any[]>([]);
+  const [voiceStep, setVoiceStep] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceResults, setVoiceResults] = useState<any[]>([]);
+  const [piibId, setPiibId] = useState('PIIB-ID-39120');
+  const [archivalContext, setArchivalContext] = useState("W 2024 r. w Osi B-4 wykryto nieszczelność rynny.");
+
+  const handleMockVoice = async (text: string) => {
+    try {
+      const result = await voiceService.simulateVoiceAnalysis(text, archivalContext);
+      setVoiceResults(prev => [...prev, result]);
+      if (voiceStep < 3) setVoiceStep(prev => prev + 1);
+    } catch (err) {
+      alert("Błąd analizy tekstu.");
+    }
+  };
+
+  const groupFindingsByPillar = () => {
+    const pillars: Record<number, any[]> = {};
+    inspectionData.filter(c => c.aiResult?.pillar).forEach(c => {
+      const p = c.aiResult.pillar;
+      if (!pillars[p]) pillars[p] = [];
+      pillars[p].push(c);
+    });
+    return pillars;
+  };
+
+  const getProtocols = () => {
+    return inspectionData.filter(c => c.aiResult?.protocolInfo).map(c => c.aiResult.protocolInfo);
+  };
 
   return (
     <div className="inspection-container">
@@ -13,15 +44,18 @@ export default function InspectionModule() {
           <button 
             className={`tab-btn ${activeTab === 'list' ? 'active' : ''}`}
             onClick={() => setActiveTab('list')}
-          >
-            Moje Przeglądy
-          </button>
+          >Moje Przeglądy</button>
           <button 
             className={`tab-btn primary ${activeTab === 'new' ? 'active' : ''}`}
             onClick={() => setActiveTab('new')}
-          >
-            + Nowy Przegląd
-          </button>
+          >+ Nowy Przegląd</button>
+          <button 
+            className={`tab-btn voice-btn ${activeTab === 'voice' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab('voice');
+              setVoiceStep(1);
+            }}
+          >🎙️ Asystent Głosowy (Hands-Free)</button>
         </div>
       </div>
 
@@ -35,25 +69,25 @@ export default function InspectionModule() {
 
         {activeTab === 'new' && (
           <div className="new-inspection-wizard">
-            <h3>Krok 1: Wgraj archiwalny protokół (PDF)</h3>
-            <p className="wizard-desc">
-              System AI odczyta z archiwalnego dokumentu wszystkie punkty kontrolne (np. dach, rynny, instalacje), aby upewnić się, że nie pominiesz żadnego z nich podczas dzisiejszych oględzin na obiekcie.
-            </p>
-            <div className="upload-area">
-              <label className="upload-btn">
-                Wybierz plik PDF
-                <input type="file" accept=".pdf" style={{ display: 'none' }} onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    alert('Funkcja analizy PDF przez AI zostanie wkrótce podłączona! Wybrano: ' + e.target.files[0].name);
-                  }
-                }} />
-              </label>
-              <span className="upload-hint">Lub przeciągnij i upuść tutaj plik z zeszłego roku.</span>
+            <div className="wizard-card">
+              <h3>Krok 1: Wgraj archiwalny protokół (PDF)</h3>
+              <p className="wizard-desc">
+                AI wyekstrahuje zalecenia historyczne (Art. 62) i przygotuje plan kontroli dla 8 filarów budowlanych.
+              </p>
+              <div className="upload-area">
+                <label className="upload-btn">
+                  Wybierz plik PDF
+                  <input type="file" accept=".pdf" style={{ display: 'none' }} />
+                </label>
+                <button className="secondary-btn" onClick={() => setArchivalContext("W 2024 r. w Osi C-12 wykryto rdzę na prętach zbrojeniowych.")}>
+                  Symuluj Analizę PDF (Nowy Kontekst)
+                </button>
+              </div>
             </div>
 
             <div className="wizard-actions">
               <button className="primary-btn start-camera-btn" onClick={() => setActiveTab('camera')}>
-                Przejdź do oględzin (Aparat) 📸
+                Rozpocznij Wizję Lokalną 📸
               </button>
             </div>
           </div>
@@ -63,13 +97,182 @@ export default function InspectionModule() {
           <CameraCapture 
             onBack={() => setActiveTab('new')} 
             onFinish={(captures) => {
-              console.log("Zebrane materiały do analizy: ", captures);
-              alert(`Oględziny zakończone! Przekazano ${captures.length} plików do silnika AI... (Wkrótce)`);
-              setActiveTab('list');
+              setInspectionData(captures);
+              setActiveTab('review');
             }}
           />
+        )}
+
+        {activeTab === 'review' && (
+          <div className="inspection-review">
+            <h3>Podsumowanie Oględzin AI</h3>
+            
+            <section className="review-section">
+              <h4>🏗️ Stan Konstrukcji (8 Filarów)</h4>
+              <div className="pillars-grid">
+                {[1,2,3,4,5,6,7,8].map(p => {
+                  const items = groupFindingsByPillar()[p] || [];
+                  return (
+                    <div key={p} className={`pillar-card ${items.length > 0 ? 'has-issues' : 'ok'}`}>
+                      <span className="pillar-num">{p}</span>
+                      <span className="pillar-name">{getPillarName(p)}</span>
+                      <span className="issue-count">{items.length} uwag</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="review-section">
+              <h4>📄 Protokoły Branżowe</h4>
+              <div className="protocols-list">
+                {getProtocols().length === 0 ? <p className="empty-hint">Nie załączono protokołów branżowych.</p> : (
+                  getProtocols().map((proto, idx) => (
+                    <div key={idx} className={`protocol-item ${proto.isCurrent ? 'current' : 'expired'}`}>
+                      <strong>{proto.type}</strong>
+                      <span>Ważność: {proto.validUntil}</span>
+                      <span className="status-tag">{proto.isCurrent ? 'AKTUALNY' : 'PO TERMINIE'}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="review-section">
+              <h4>🛠️ Draft c-KOB (JSON)</h4>
+              <pre className="json-preview">
+                {JSON.stringify({
+                  metadata: { date: new Date().toLocaleDateString(), inspector: "Senior Developer (Test)" },
+                  findings: inspectionData.map(c => c.aiResult?.voiceAnalysis?.structuredData || c.aiResult?.findings),
+                  legal: "Zgodne z Art. 60b Prawa Budowlanego"
+                }, null, 2)}
+              </pre>
+            </section>
+
+            <section className="safety-statement-card">
+              <h4>OŚWIADCZENIE (Strona 17 Protokołu)</h4>
+              <p>
+                "Na podstawie wyników kontroli stwierdzam, że obiekt 
+                <strong className={inspectionData.some(c => c.aiResult?.status === 'ERROR') ? 'danger' : 'safe'}>
+                  {inspectionData.some(c => c.aiResult?.status === 'ERROR') ? ' NIE NADAJE SIĘ ' : ' nadaje się '}
+                </strong> 
+                do bezpiecznego użytkowania w zakresie objętym kontrolą, pod warunkiem usunięcia wskazanych usterek."
+              </p>
+              <div className="inspector-signature">
+                <input 
+                  type="text" 
+                  value={piibId} 
+                  onChange={(e) => setPiibId(e.target.value)} 
+                  placeholder="Numer uprawnień PIIB"
+                  className="signature-input"
+                />
+                <span>Wpis w PIIB zweryfikowany: ✅ AKTUALNY</span>
+              </div>
+            </section>
+
+            <div className="final-actions">
+              <button className="finish-inspection-btn" onClick={() => {
+                alert("Protokół wyeksportowany do c-KOB!");
+                setActiveTab('list');
+              }}>Generuj Protokół Końcowy 📄</button>
+            </div>
+          </div>
+        )}
+        {activeTab === 'voice' && (
+          <div className="voice-assistant-container">
+            <div className="voice-card">
+              <div className="voice-avatar">🤖</div>
+              <div className="voice-dialogue">
+                {voiceStep === 1 && <h3>"Czy zalecenie dotyczące naprawy rynien z poprzedniego roku zostało wykonane?"</h3>}
+                {voiceStep === 2 && <h3>"Opisz aktualną obserwację (np. odkrywka fundamentów w osi A)."</h3>}
+                {voiceStep === 3 && <h3>"Analizuję zapis... Czy chcesz dodać zdjęcie z dzisiejszej sesji 'Inspektora Cienia'?"</h3>}
+                
+                {voiceResults.length > 0 && (
+                  <div className="voice-results-preview">
+                    {voiceResults.map((res, i) => (
+                      <div key={i} className="voice-res-item">
+                        <strong>Filar {res.pillar}:</strong> {res.findings[0]}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="voice-controls">
+                <div className="voice-mocks">
+                  {voiceStep === 1 && (
+                    <>
+                      <button className="mock-btn" onClick={() => handleMockVoice("Tak, zalecenie dotyczące naprawy rynien z 2024 zostało wykonane.")}>
+                        ✅ Rynny Naprawione (Happy Path)
+                      </button>
+                      <button className="mock-btn" onClick={() => handleMockVoice("Nie, nie wykonano naprawy rynien. Wciąż widoczne ślady przecieków.")}>
+                        ❌ Brak Naprawy
+                      </button>
+                    </>
+                  )}
+                  {voiceStep === 2 && (
+                    <>
+                      <button className="mock-btn" onClick={() => handleMockVoice("W osi A wykonano odkrywkę fundamentów. Brak zawilgocenia, izolacja w dobrym stanie.")}>
+                        🏗️ Fundamenty OK
+                      </button>
+                      <button className="mock-btn" onClick={() => handleMockVoice("Widoczne drobne zarysowanie tynku nad drzwiami w pokoju 204. Filar 6.")}>
+                        🧱 Rysa nad drzwiami
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <button 
+                  className={`mic-btn ${isRecording ? 'recording' : ''}`}
+                  onClick={async () => {
+                    try {
+                      if (!isRecording) {
+                        await voiceService.startRecording();
+                        setIsRecording(true);
+                      } else {
+                        setIsRecording(false); // Set early for UX
+                        const audio = await voiceService.stopRecording();
+                        if (!audio) throw new Error("Brak nagrania");
+                        const result = await voiceService.analyzeVoice(audio);
+                        setVoiceResults(prev => [...prev, result]);
+                        if (voiceStep < 3) setVoiceStep(prev => prev + 1);
+                      }
+                    } catch (err) {
+                      setIsRecording(false);
+                      alert("Błąd mikrofonu: Upewnij się, że zezwoliłeś na dostęp do nagrywania w przeglądarce.");
+                    }
+                  }}
+                >
+                  {isRecording ? '⏹️ Przestań Nagrywać' : '🎙️ Odpowiedz Głosowo'}
+                </button>
+                <p className="voice-hint">
+                  {isRecording ? 'Mów teraz... AI rozpozna terminy techniczne.' : 'AI prowadzi Cię przez protokół Hands-Free.'}
+                </p>
+              </div>
+              
+              {voiceStep === 3 && (
+                <button className="primary-btn" onClick={() => setActiveTab('camera')}>Przejdź do Zdjęć 📸</button>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 }
+
+function getPillarName(id: number) {
+  const names = [
+    "",
+    "Fundamenty i Piwnice",
+    "Konstrukcja Nośna",
+    "Elewacja i Ściany",
+    "Dach i Pokrycie",
+    "Odwodnienie",
+    "Stolarka",
+    "Elementy Dodatkowe",
+    "Otoczenie"
+  ];
+  return names[id];
+}
+
