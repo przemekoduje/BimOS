@@ -1,19 +1,29 @@
 import React, { useState } from 'react';
-import { Search, Send, Clock, Globe } from 'lucide-react';
+import { Send, Clock, Globe, Plus, Mic } from 'lucide-react';
+import NewsGrid from './NewsGrid';
+import QuickNewsList from './QuickNewsList';
+import NewsDetail from './NewsDetail';
 import './SearchHero.css';
 
 const SearchHero: React.FC = () => {
   const [query, setQuery] = useState('');
+  const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
+
+  if (selectedNewsId) {
+    return <NewsDetail id={selectedNewsId} onBack={() => setSelectedNewsId(null)} />;
+  }
 
   return (
     <div className="hero-container">
       <div className="hero-content">
-        <h1 className="hero-title">Construction AI Assistant</h1>
-        <p className="hero-subtitle">Baza wiedzy i nadzór cyfrowy w Twoim zasięgu.</p>
+        <h1 className="hero-title">Inżynieria bez biurka.</h1>
+        <p className="hero-subtitle">Odpowiedź jest tam, gdzie Ty.</p>
         
         <div className="search-wrapper">
           <div className="search-bar">
-            <Search className="search-icon" size={20} />
+            <button className="search-action-btn">
+              <Plus size={20} />
+            </button>
             <input 
               type="text" 
               className="search-input" 
@@ -21,9 +31,14 @@ const SearchHero: React.FC = () => {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <button className="send-button">
-              <Send size={18} />
-            </button>
+            <div className="search-right-actions">
+              <button className="search-action-btn">
+                <Mic size={20} />
+              </button>
+              <button className="send-button">
+                <Send size={18} />
+              </button>
+            </div>
           </div>
           
           <div className="search-footer">
@@ -39,10 +54,17 @@ const SearchHero: React.FC = () => {
         </div>
 
         <div className="quick-links">
-          <button className="pill">Wyszukaj inżyniera</button>
-          <button className="pill">Prawo budowlane 2024</button>
-          <button className="pill">Analiza wąskich gardeł</button>
+          <button className="pill active">Przypadki użycia</button>
+          <button className="pill">Stwórz prototyp</button>
+          <button className="pill">Pozyskiwanie leadów</button>
+          <button className="pill">Pomóż mi</button>
         </div>
+
+        <QuickNewsList onItemClick={(text) => setQuery(text)} />
+
+        <section className="dashboard-news-section">
+          <NewsGrid onCardClick={(id) => setSelectedNewsId(id)} />
+        </section>
       </div>
     </div>
   );

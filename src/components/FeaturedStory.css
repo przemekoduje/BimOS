@@ -1,0 +1,146 @@
+.featured-story {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 48px;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 20px;
+  transition: background 0.2s;
+}
+
+.featured-story:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.featured-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.featured-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #1a1a1a;
+  margin: 0 0 16px 0;
+  letter-spacing: -0.02em;
+}
+
+.featured-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: #999;
+  margin-bottom: 20px;
+}
+
+.featured-summary {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: #444;
+  margin-bottom: 24px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.featured-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.source-avatars {
+  display: flex;
+  margin-right: 4px;
+}
+
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #eee;
+  border: 2px solid white;
+  margin-left: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #666;
+}
+
+.avatar:first-child {
+  margin-left: 0;
+}
+
+.source-count {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+.feat-action-btn {
+  background: none;
+  border: none;
+  padding: 8px;
+  border-radius: 8px;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.feat-action-btn:hover {
+  background: #f5f5f7;
+  color: #1a1a1a;
+}
+
+.featured-image-container {
+  width: 320px;
+  height: 240px;
+  border-radius: 16px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.featured-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s;
+}
+
+.featured-story:hover .featured-image {
+  transform: scale(1.05);
+}
+
+@media (max-width: 900px) {
+  .featured-story {
+    flex-direction: column-reverse;
+  }
+  
+  .featured-image-container {
+    width: 100%;
+    height: 200px;
+  }
+  
+  .featured-title {
+    font-size: 1.8rem;
+    margin-top: 20px;
+  }
+}

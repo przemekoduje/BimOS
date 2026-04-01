@@ -1,0 +1,29 @@
+[
+  {
+    "id": "auto_1",
+    "title": "Nowelizacja Warunków Technicznych 2024: Zmiany w nasłonecznieniu i odległościach",
+    "category": "Prawo",
+    "shortNote": "Nowe przepisy wprowadzają bardziej rygorystyczne wymagania dot. minimalnej odległości budynków od granicy lasu oraz nowe zasady obliczania nasłonecznienia.",
+    "content": "Od kwietnia 2024 roku wchodzą w życie kluczowe zmiany w Rozporządzeniu w sprawie warunków technicznych, jakim powinny odpowiadać budynki i ich usytuowanie. Najważniejszą zmianą jest doprecyzowanie odległości budynków od granic działek leśnych - obecnie minimalna odległość to 4 metry w przypadku, gdy działka sąsiednia nie jest przeznaczona pod zabudowę. Dodatkowo, wprowadzono nowe wymagania dotyczące minimalnej powierzchni biologicznie czynnej na placach zabaw, co ma zapobiegać tzw. 'betonozie' na nowych osiedlach. Inżynierowie muszą teraz ściśle przestrzegać nowych norm akustycznych dla przegród między lokalami, co wpłynie na dobór materiałów konstrukcyjnych.",
+    "isNew": true,
+    "date": "2024-04-01"
+  },
+  {
+    "id": "auto_2",
+    "title": "E-Dziennik Budowy staje się standardem: Koniec z papierową dokumentacją od 2024",
+    "category": "Technologia",
+    "shortNote": "Cyfryzacja procesu inwestycyjnego zyskuje na sile - od 2024 dzienniki budowy muszą być prowadzone w systemie EDB.",
+    "content": "Zgodnie z ustawą o cyfryzacji procesu budowlanego, tradycyjne papierowe dzienniki budowy ustępują miejsca systemowi EDB (Elektroniczny Dziennik Budowy). Każdy kierownik budowy oraz inspektor nadzoru inwestorskiego jest zobowiązany do posiadania konta w systemie i dokonywania wpisów drogą elektroniczną. System ten ma na celu zwiększenie przejrzystości procesu budowlanego oraz ułatwienie organom nadzoru dostępu do dokumentacji. Wersja papierowa pozostaje dopuszczalna jedynie dla inwestycji rozpoczętych przed zmianą przepisów lub w wyjątkowych sytuacjach technicznych, co w praktyce oznacza rewolucję w codziennej pracy inżynierów na placu budowy.",
+    "isNew": true,
+    "date": "2024-03-25"
+  },
+  {
+    "id": "auto_3",
+    "title": "Nowe świadectwa charakterystyki energetycznej: Obowiązek dla każdego lokalu",
+    "category": "Przepisy",
+    "shortNote": "Zaostrzenie kar za brak świadectwa charakterystyki energetycznej przy sprzedaży lub wynajmie nieruchomości.",
+    "content": "Brak świadectwa charakterystyki energetycznej może teraz skutkować grzywną do 5000 PLN. Nowelizacja przepisów nakłada obowiązek przekazania świadectwa nabywcy lub najemcy w momencie zawierania umowy. Dla inżynierów oznacza to zwiększony popyt na usługi związane z audytem energetycznym. Warto zwrócić uwagę, że od 2024 roku świadectwa muszą zawierać bardziej szczegółowe dane dotyczące źródeł ciepła, co ma pomóc w monitorowaniu emisyjności budynków w skali całego kraju. Jest to element szerszej strategii dekarbonizacji sektora budowlanego w Polsce.",
+    "isNew": false,
+    "date": "2024-03-20"
+  }
+]
