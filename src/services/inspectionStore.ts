@@ -11,6 +11,18 @@ export interface ChecklistItem {
   is_mandatory: boolean;
 }
 
+export interface LiveFeedItem {
+  id: string;
+  timestamp: string;
+  source: 'ad-hoc' | 'auto-detect';
+  image_url?: string;
+  transcription?: string;
+  ai_analysis: string;
+  severity: 'critical' | 'warning' | 'info';
+  estimated_size?: string;
+  ar_bounding_box?: { x: number; y: number; width: number; height: number };
+}
+
 export interface ComplianceGap {
   item: string;
   issue: string;
@@ -24,6 +36,10 @@ class InspectionStore {
   private structuralAlerts: string[] = [];
   private spatialSynonyms: Record<string, string[]> = {};
   private unverifiedHistory: boolean = false;
+
+  // Nowe stany dla Live Inspection Module
+  private liveFeedItems: LiveFeedItem[] = [];
+  private visitedZones: Set<string> = new Set();
 
   setContext(context: PreInspectionContext, unverified: boolean = false) {
     this.context = context;
@@ -50,6 +66,45 @@ class InspectionStore {
 
   isUnverified() {
     return this.unverifiedHistory;
+  }
+
+  // Live Inspection Methods
+  addLiveFeedItem(item: Omit<LiveFeedItem, 'id' | 'timestamp'>) {
+    const newItem: LiveFeedItem = {
+      ...item,
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString()
+    };
+    this.liveFeedItems.push(newItem);
+    return newItem;
+  }
+
+  getLiveFeedItems() {
+    return this.liveFeedItems;
+  }
+
+  markZoneVisited(zone: string) {
+    this.visitedZones.add(zone.toLowerCase());
+  }
+
+  getVisitedZones() {
+    return Array.from(this.visitedZones);
+  }
+
+  getMissingMandatoryZones(): string[] {
+    if (!this.context) return [];
+    
+    // Filtrowanie stref z historycznych defektów (jeśli są krytyczne lub wysokie)
+    const requiredZones = this.context.historical_defects
+      .filter(d => d.urgency === 'Critical' || d.urgency === 'High')
+      .map(d => d.loc.toLowerCase());
+
+    const missing = requiredZones.filter(zone => {
+      // Szukamy czy jakakolwiek odwiedzona strefa zawiera nazwę wymaganej strefy
+      return !Array.from(this.visitedZones).some(visited => visited.includes(zone) || zone.includes(visited));
+    });
+
+    return [...new Set(missing)]; // Unikalne braki
   }
 
   /**

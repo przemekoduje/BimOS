@@ -233,6 +233,61 @@ export async function verifyToolReading(imageB64: string): Promise<any> {
   return callGemini(imageB64, TOOL_ANALYSIS_PROMPT);
 }
 
+/**
+ * System prompt for Ad-Hoc Question & AR Automatic Measurement
+ */
+export const AD_HOC_PROMPT = `
+ROLE: Ekspert Nadzoru Inżynierskiego i analityk obrazu (Live AR).
+ZADANIE: Odpowiedz na zapytanie inspektora ("Zapytanie Ad-hoc") na podstawie przesłanego zdjęcia oraz podaj szacunkowy "Autopomiar Liniowy AR".
+
+Instrukcja:
+1. Analiza: Odpowiedz krótko i merytorycznie na pytanie.
+2. Powaga (Severity): Skategoryzuj powagę (critical, warning, info) dla głównej wady.
+   - critical (np. korozja zbrojenia, pęknięcia skrośne, stany awaryjne). Będą obramowane na czerwono.
+   - warning (np. przecieki, rysy powierzchniowe, ubytki). Będą obramowane na żółto.
+   - info (np. ogólne zapytania).
+3. Bounding Box: Wyznacz ramkę (bounding box) otaczającą wykrytą anomalię/obiekt w formacie {x, y, width, height} w wartościach znormalizowanych od 0.0 do 1.0 (np. x: 0.1 oznacza 10% od lewej krawędzi, width: 0.5 oznacza połowę szerokości obrazu).
+4. Pomiar Liniowy (Autopomiar AR): Podaj szacunkowy widoczny na obrazie wymiar (np. "Obszar ok. 20x30 cm" lub "Rysa ok. 15cm").
+
+Zwróć JSON:
+{
+  "ai_analysis": "Odpowiedź na pytanie / Ocena...",
+  "severity": "critical" | "warning" | "info",
+  "estimated_size": "Wymiar...",
+  "ar_bounding_box": { "x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0 }
+}
+`;
+
+export async function askAdHocQuestion(imageB64: string, question: string): Promise<any> {
+  const customPrompt = `PYTANIE INSPEKTORA: ${question}\n\n${AD_HOC_PROMPT}`;
+  return callGemini(imageB64, customPrompt);
+}
+
+/**
+ * System prompt for Continuous AR Frame scan (Live Inspection Radar)
+ */
+export const AUTO_FRAME_PROMPT = `
+ROLE: Inspektor widzenia maszynowego (Live Radar / Bounding Boxes AR).
+ZADANIE: Skanuj przesłaną klatkę pod kątem usterek budowlanych (pęknięcia, pleśń, ubytki konstrukcji, zalania).
+
+Jeśli BRAK widocznych krytycznych lub żółtych wad, natychmiast zwróć:
+{ "detected": false }
+
+Jeśli WYKRYTO wadę wymagającą obramowania AR, zwróć:
+{
+  "detected": true,
+  "ai_analysis": "[Filar X] Krótki opis techniczny (np. Pionowe pęknięcie tynku).",
+  "severity": "critical" | "warning",
+  "estimated_size": "Szacunek miarowy (np. dł. ok. 10cm)",
+  "ar_bounding_box": { "x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0 }
+}
+Pamiętaj, by bounding box miał współrzędne w przedziale [0.0 - 1.0].
+`;
+
+export async function analyzeLiveVideoFrame(imageB64: string): Promise<any> {
+  return callGemini(imageB64, AUTO_FRAME_PROMPT);
+}
+
 export async function processVoiceLog(audioB64: string, textOverride?: string, context?: string): Promise<VerificationResult> {
   // If we have textOverride, we use a text-only prompt to Gemini
   const result = await callGemini(audioB64, VOICE_LOG_STRUCTURE_PROMPT, audioB64 ? 'audio/wav' : 'text/plain', textOverride, context);

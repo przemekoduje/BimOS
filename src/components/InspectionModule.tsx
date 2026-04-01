@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import CameraCapture from './CameraCapture';
+import LiveInspection from './LiveInspection';
 import { voiceService } from '../services/voiceService';
 import { processPreInspectionDocuments } from '../services/aiService';
 import type { PreInspectionContext } from '../services/aiService';
@@ -244,10 +244,19 @@ export default function InspectionModule() {
         )}
 
         {activeTab === 'camera' && (
-          <CameraCapture 
+          <LiveInspection 
             onBack={() => setActiveTab('new')} 
-            onFinish={(captures) => {
-              setInspectionData(captures);
+            onFinish={() => {
+              const liveData = inspectionStore.getLiveFeedItems();
+              const mappedData = liveData.map(item => ({
+                aiResult: {
+                  status: item.severity === 'critical' ? 'ERROR' : 'WARNING',
+                  pillar: 1, // Default mapping
+                  findings: [item.transcription ? `[Q: ${item.transcription}] ${item.ai_analysis}` : item.ai_analysis],
+                  recommendation: "Uzupełnij protokół",
+                }
+              }));
+              setInspectionData(mappedData);
               setActiveTab('review');
             }}
           />
