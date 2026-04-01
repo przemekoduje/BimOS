@@ -39,6 +39,12 @@
   align-items: center;
   gap: 0.75rem;
   overflow: hidden;
+  animation: tickerRoll 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes tickerRoll {
+  0% { opacity: 0; transform: translateY(15px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 .ticker-text {

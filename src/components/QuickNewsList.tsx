@@ -35,6 +35,15 @@ const QuickNewsList: React.FC<QuickNewsListProps> = ({ onItemClick }) => {
     fetchNews();
   }, []);
 
+  useEffect(() => {
+    if (news.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentIndex((prev) => (prev + 1) % news.length);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [news.length]);
+
   if (loading || news.length === 0) return null;
 
   const currentItem = news[currentIndex];
@@ -49,7 +58,7 @@ const QuickNewsList: React.FC<QuickNewsListProps> = ({ onItemClick }) => {
           <Scale size={14} />
           <span>Legislacja:</span>
         </div>
-        <div className="ticker-content">
+        <div className="ticker-content" key={currentIndex}>
           <span className="ticker-text">{currentItem.title}</span>
           {currentItem.isNew && <span className="ticker-badge">NOWE</span>}
         </div>

@@ -38,17 +38,33 @@
 }
 
 .news-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
   gap: 24px;
-  justify-items: center;
+  padding-bottom: 24px;
+}
+
+/* Custom scrollbar for news-grid */
+.news-grid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.news-grid::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.news-grid::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+.news-grid::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
 }
 
 @media (max-width: 600px) {
-  .news-grid {
-    grid-template-columns: 1fr;
-  }
-  
   .news-grid-header {
     flex-direction: column;
     gap: 12px;

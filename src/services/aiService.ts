@@ -17,6 +17,13 @@ if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 }
 
+import cKOBBible from '../knowledge_base/cKOB.md?raw';
+
+export interface ChatMessage {
+  role: 'user' | 'ai';
+  content: string;
+}
+
 export interface VerificationResult {
   status: 'SUCCESS' | 'WARNING' | 'ERROR';
   findings: string[];
@@ -57,6 +64,37 @@ export interface PreInspectionContext {
   };
   spatial_markers: string[];
 }
+
+export const KNOWLEDGE_BASE_PROMPT = `
+[ROLE]
+Jesteś elitarnym inżynierskim asystentem AI "BimOS" wbudowanym w główny pulpit aplikacji. Posiadasz absolutną i bezbłędną wiedzę bazującą WYŁĄCZNIE na "Biblii cKOB", którą dostałeś.
+
+[TASKS]
+1. Udziel szczegółowej, bardzo precyzyjnej odpowiedzi na zadane zapytanie.
+2. ZASADY ZWRACANIA TEKSTU (Perplexity-Style):
+   - Odpowiedź musi być sformatowana w CZYSTYM, nowoczesnym Markdownie.
+   - Używaj nagłówków drugiego (##) lub trzeciego (###) stopnia do dzielenia sekcji.
+   - NIE używaj nadmiernie pogrubień (bold) na każdym słowie wewnątrz akapitu.
+   - Jeśli to konieczne używaj list punktowanych, ale nie zaśmiecaj tekstu znakami specjalnymi.
+   - Zadbaj o "oddech" w tekście – podziały na logiczne akapity.
+
+3. DEFINICJE, POJĘCIA I CYTATY PRAWNE (Widoczne tylko na hover):
+   - KATEGORYCZNY ZAKAZ: Nigdy nie tłumacz pojęć i skrótów klasycznie w nawiasach typu "PINB (Powiatowy Inspektor...)".
+   - Kiedy używasz skrótów lub trudnych pojęć inżynieryjnych, MUSISZ ukryć ich rozwinięcie jako "tooltip" stosując NATYWNY SYNTAX LINKU w Markdown z atrybutem tytułowym. URL linku to zawsze "#", a w cudzysłowach zaraz po nim podajesz wyjaśnienie.
+   - Prawidłowy schemat: [WIDOCZNY SKRÓT](# "Pełne rozwinięcie pojęcia w cudzysłowach podawane z użyciem spacji")
+   - AKTY PRAWNE: Jeśli w odpowiedzi powołujesz się na konkretny przepis prawa (np. Art. 60c ust. 2 Prawa budowlanego), ZAWSZE stwórz dla niego dymek. Jako treść dymka podaj konkretny, merytoryczny zapis i zwięzłe streszczenie tego artykułu prawnego. Użyj do tego swojej potężnej wbudowanej wiedzy internetowej o polskim Prawie Budowlanym.
+   - Przykład pojęcia: Każda [OPK](# "Osoba Przeprowadzająca Kontrolę") dokonuje wpisu.
+   - Przykład prawa: Zgodnie z [Art. 60c ust. 1 PB](# "Zgodnie z prawem budowlanym, właściciel lub zarządca obiektu jest obowiązany do założenia książki w terminie do 30 dni...")
+   - Zastosuj to formowanie DLA KAŻDEGO technicznego skrótu, pojęcia oraz artykułu prawnego! To zasada krytyczna dla renderowania interfejsu.
+
+4. DOPYTANIA (Related Questions):
+   - Na SAMYM KOŃCU odpowiedzi, bezbłędnie wygeneruj 3 przydatne, kontekstowe pytania, które Użytkownik mógłby zadać jako następne.
+   - Pytania te muszą znajdować się w oddzielnej sekcji zaczynającej się dokładnie od frazy: "[DOPYTANIA_START]" (bez cudzysłowów), a po niej w nowych liniach wypisane same pytania (każde z myślnikiem np. "- Kto nakłada karę?").
+   - ŚCISŁY ZAKAZ: W pytaniach dodatkowych NIE STOSUJ absolutnie żadnych dymków (tooltipów) ani wyjaśnień w nawiasach! Zapisuj je jako całkowicie gładki, krótki i czysty tekst. Pytania pełnią rolę krótkich "przycisków" w interfejsie.
+
+[BIBLIA WIEDZY cKOB]
+${cKOBBible}
+`;
 
 /**
  * System prompt for Construction Assessment (8 Pillars) + "Shadow Inspector" Logic
@@ -288,6 +326,14 @@ export async function analyzeLiveVideoFrame(imageB64: string): Promise<any> {
   return callGemini(imageB64, AUTO_FRAME_PROMPT);
 }
 
+export async function askKnowledgeBase(history: ChatMessage[], newQuery: string): Promise<string> {
+  const customPrompt = `${KNOWLEDGE_BASE_PROMPT}\n\nHISTORIA ROZMOWY:\n${history.map(h => (h.role === 'user' ? 'UŻYTKOWNIK:' : 'AI:') + ' ' + h.content).join('\n')}\n\nUŻYTKOWNIK: ${newQuery}\nAI: `;
+  
+  // Przekazujemy pusty obraz i wymuszamy expectJson = false
+  const response = await callGemini("", customPrompt, "text/plain", undefined, undefined, false);
+  return response;
+}
+
 export async function processVoiceLog(audioB64: string, textOverride?: string, context?: string): Promise<VerificationResult> {
   // If we have textOverride, we use a text-only prompt to Gemini
   const result = await callGemini(audioB64, VOICE_LOG_STRUCTURE_PROMPT, audioB64 ? 'audio/wav' : 'text/plain', textOverride, context);
@@ -416,7 +462,8 @@ async function callGemini(
   prompt: string, 
   mimeType: string = "image/jpeg", 
   textOverride?: string,
-  context?: string // Technical History (Archival Findings)
+  context?: string, // Technical History (Archival Findings)
+  expectJson: boolean = true
 ): Promise<any> {
   if (!API_KEY) throw new Error("Missing API Key");
   
@@ -439,7 +486,7 @@ async function callGemini(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts }],
-          generationConfig: { responseMimeType: "application/json" }
+          generationConfig: expectJson ? { responseMimeType: "application/json" } : undefined
         }),
       });
 
@@ -458,7 +505,14 @@ async function callGemini(
       }
 
       const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return resultText ? JSON.parse(resultText) : { status: 'ERROR', findings: ["Błąd parsowania AI"], recommendation: "" };
+      if (!resultText) {
+        return expectJson ? { status: 'ERROR', findings: ["Brak tekstu od AI"], recommendation: "" } : "Brak odpowiedzi AI.";
+      }
+      
+      if (!expectJson) {
+        return resultText;
+      }
+      return JSON.parse(resultText);
     } catch (error) {
       if (retryCount >= maxRetries - 1) {
         console.error("Gemini Final Error after retries:", error);
