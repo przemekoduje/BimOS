@@ -34,7 +34,7 @@ W systemie teleinformatycznym cKOB pracują tzw. **interesariusze** – wyłącz
 
 ### B. Osoba Uprawniona do Prowadzenia Książki (UPK)
 *   **Odpowiedzialność:** Zgodnie z Art. 60d PB, WZ musi wskazać osobę fizyczną bezpośrednio odpowiedzialną za prowadzenie KOB [13]. To na tej osobie spoczywa bieżący ciężar utrzymania dokumentacji. Zgodnie ze stanowiskiem GUNB, UPK może być tylko jedna osoba fizyczna odpowiedzialna za całość (lub w przypadku wskazania kilku osób, należy prawnie określić odrębny zakres odpowiedzialności każdej z nich) [10, 14].
-*   **Uprawnienia:** UPK ma te same uprawnienia co WZ z wyjątkami: **nie może zakładać książek, przekazywać ich nowym podmiotom ani zapraszać kolejnych UPK/WZ** [10, 12]. UPK odpowiada m.in. za terminowe dokonywanie wpisów oraz dodanie planu sytuacyjnego obiektu (z zaznaczeniem granic, dróg pożarowych, hydrantów, czy zasuw instalacji) [11, 15, 16].
+*   **Uprawnienia:** UPK ma te same uprawnienia co WZ z wyjątkami: **nie może zakładać książek, przekazywać ich nowym podmiotom ani zapraszać kolejnych UPK/WZ** [10, 12]. UPK odpowiada m.in. za terminowe dokonywanie wpisów oraz dodanie **planu sytuacyjnego obiektu**. Zgodnie z instrukcją, plan musi być pierwszym elementem po założeniu książki i zawierać: granice działki, usytuowanie obiektu, drogi dojazdowe (ppoż) oraz przyłącza i urządzenia przeciwpożarowe [11, 15, 16].
 
 ### C. Osoba Przeprowadzająca Kontrolę (OPK)
 *   **Kim jest OPK?** To inżynier lub fachowiec posiadający odpowiednie uprawnienia: budowlaniec, elektryk, gazownik lub kominiarz [12, 17]. OPK wykonuje fizyczne przeglądy (roczne, półroczne, pięcioletnie) wynikające z art. 62 ust. 1 PB [6].
@@ -102,9 +102,21 @@ Użytkownicy, w tym pełnomocnicy wprowadzający informacje, muszą zachować rz
 
 ## 7. Integralność Danych – "Mięso" Techniczne i Tablice KOB
 
-Wpisy w systemie przypisano do rygorystycznie uporządkowanych **tablic (I - VIII)**, odzwierciedlających papierowe pierwowzory [62-69].
-*   **Zasada Trwałości (Blockchain-like audit trail):** System posiada wbudowane algorytmy zabezpieczające zapewniające rozliczalność (kto, co i kiedy wpisał). **Żadnych danych, które zostały wprowadzone i zatwierdzone do systemu cKOB, nie można fizycznie z niego usunąć** (Art. 60h ust 6) [70]. Wpisy pozostają w systemie przez czas istnienia obiektu, a kasowane są automatycznie dopiero po upływie **10 lat od momentu zamknięcia** KOB (np. wskutek rozbiórki obiektu) [17]. System daje również możliwość walidacji kryptograficznej wygenerowanych plików PDF (sumy kontrolne/hashe dokumentu), dzięki czemu można sprawdzić autentyczność wydruku organom nadzoru [71-75].
+### Szczegółowy Wykaz Tablic (Quick Reference):
+*   **Tablica I:** Dane identyfikacyjne obiektu (adres, numer działki, funkcja).
+*   **Tablica II:** Dane właściciela i zarządcy.
+*   **Tablica III:** Protokół kontroli okresowych (główny obszar pracy OPK).
+*   **Tablica IV:** Roboty budowlane w obiekcie po oddaniu do użytkowania.
+*   **Tablica V:** Katastrofy budowlane.
+*   **Tablica VI:** Decyzje, postanowienia i inne akty organów (np. nakazy PINB).
+*   **Tablica VII:** Dokumentacja techniczna i ekspertyzy.
+*   **Tablica VIII:** Wykaz osób upoważnionych do prowadzenia książki.
+
+### Logika Obsługi Systemu:
+*   **Status "Wpisu w toku" (Wersja robocza):** System cKOB umożliwia zapisanie wpisu jako "Wersja robocza". Jest ona widoczna wyłącznie dla autora i nie wywołuje skutków prawnych. Dopiero kliknięcie **"ZATWIERDŹ"** formalizuje wpis, czyni go widocznym dla innych uprawnionych i uruchamia ustawowy termin 30 dni na ewentualną korektę.
+*   **Zasada Trwałości (Blockchain-like audit trail):** System posiada wbudowane algorytmy zabezpieczające zapewniające rozliczalność (kto, co i kiedy wpisał). **Żadnych danych, które zostały wprowadzone i zatwierdzone do systemu cKOB, nie można fizycznie z niego usunąć** (Art. 60h ust 6) [70]. 
+ Wpisy pozostają w systemie przez czas istnienia obiektu, a kasowane są automatycznie dopiero po upływie **10 lat od momentu zamknięcia** KOB (np. wskutek rozbiórki obiektu) [17]. System daje również możliwość walidacji kryptograficznej wygenerowanych plików PDF (sumy kontrolne/hashe dokumentu), dzięki czemu można sprawdzić autentyczność wydruku organom nadzoru [71-75].
 *   **Edycja i Anulowanie:** Jeśli we wpisie pojawi się błąd inżynierski:
     *   Korekt i zmian dla tablic 3, 4, 5, 6, 7 i 8 może dokonywać **wyłącznie autor danego wpisu** [76].
     *   Osoba dokonująca kontroli (OPK) jest objęta specjalnym reżimem limitu czasowego – **system c-KOB zablokuje możliwość korekty bądź edycji własnego wpisu po upływie zaledwie 30 dni od jego dokonania** [76-78]. W przypadku anulowania lub korekty wpisu po czasie, w systemie odkłada się wpis "anulowany" pokreślony kolorem pomarańczowym i na zawsze widoczny z zaznaczeniem, co uległo korekcie [79-82].
-*   **Wielkość Plików (Załączniki):** Akceptowane rozszerzenia to m.in. `pdf, jpg, tif, zip, png`. Zaimplementowano sztywne ograniczenie wagi każdego z załączanych plików – **maksymalnie 5 MB** [83].
+*   **Wielkość Plików (Załączniki):** Akceptowane rozszerzenia to m.in. `pdf, jpg, tif, zip, png`. Zaimplementowano sztywne ograniczenie wagi każdego z załączanych plików – **maksymalnie 5 MB** [83]. Przy załączaniu dokumentów zewnętrznych (np. potwierdzenia uprawnień z e-CRUB), system wymaga podania numeru dokumentu oraz dokładnej daty jego wydania.

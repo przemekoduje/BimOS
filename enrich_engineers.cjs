@@ -145,10 +145,10 @@ async function enrichEngineers() {
         }
         
         // Sprawdzamy, czy ten inżynier już tam nie czeka
-        const alreadyPending = pendingList.find(p => p.id === engineer.id);
+        const alreadyPending = pendingList.find(p => String(p.id) === String(engineer.id));
         if (!alreadyPending) {
           pendingList.unshift({
-            id: engineer.id,
+            id: String(engineer.id),
             timestamp: new Date().toISOString(),
             name: name,
             license: license,
