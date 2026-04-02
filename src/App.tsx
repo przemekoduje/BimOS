@@ -1,18 +1,41 @@
 import { useState } from 'react'
-import { Layers, Search, Compass, ClipboardCheck, Settings, LogIn, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Layers, Search, Compass, Settings, LogIn, LogOut, PanelLeftClose, PanelLeftOpen, MessageSquare } from 'lucide-react'
 import SearchHero from './components/SearchHero'
 import AdminPanel from './components/AdminPanel'
-import InspectionModule from './components/InspectionModule'
 import DiscoverDashboard from './components/DiscoverDashboard'
 import NewsDetail from './components/NewsDetail'
 import AuthModal from './components/AuthModal'
 import './index.css'
 
 function App() {
-  const [view, setView] = useState<'search' | 'admin' | 'inspections' | 'discover'>('search');
+  const [view, setView] = useState<'search' | 'admin' | 'discover'>('search');
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  
+  // Weryfikacja stanu autoryzacji z localStorage
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('bimos_auth') === 'true';
+  });
+  const [userEmail, setUserEmail] = useState(() => {
+    return localStorage.getItem('bimos_email') || '';
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem('bimos_auth');
+    localStorage.removeItem('bimos_email');
+    setIsLoggedIn(false);
+    setUserEmail('');
+    setView('search');
+  };
+
+  const handleLoginSuccess = (email: string) => {
+    localStorage.setItem('bimos_auth', 'true');
+    localStorage.setItem('bimos_email', email);
+    setIsLoggedIn(true);
+    setUserEmail(email);
+    setShowAuthModal(false);
+  };
 
   const handleNewsClick = (id: string) => {
     setSelectedNewsId(id);
@@ -26,7 +49,7 @@ function App() {
     <div className="app">
       <aside className={`sidebar ${isSidebarExpanded ? 'expanded' : ''}`}>
         <div className="sidebar-top">
-          <div className="sidebar-logo" onClick={() => { setView('search'); setSelectedNewsId(null); }}>
+          <div className="sidebar-logo" onClick={() => { setView('search'); }}>
             <Layers size={28} strokeWidth={1.5} className="sidebar-icon-main" />
             <span className="sidebar-text title-text">BimOS</span>
           </div>
@@ -45,7 +68,7 @@ function App() {
               onClick={() => { setView('search'); setSelectedNewsId(null); }}
             >
               <Search size={22} strokeWidth={1.5} className="sidebar-icon" />
-              <span className="sidebar-text">Szukaj</span>
+              <span className="sidebar-text">Szukaj (cKOB)</span>
             </button>
             <button 
               className={`sidebar-link ${view === 'discover' ? 'active' : ''}`}
@@ -54,48 +77,86 @@ function App() {
               <Compass size={22} strokeWidth={1.5} className="sidebar-icon" />
               <span className="sidebar-text">Odkrywaj</span>
             </button>
-            <button 
-              className={`sidebar-link ${view === 'inspections' ? 'active' : ''}`}
-              onClick={() => setView('inspections')}
-            >
-              <ClipboardCheck size={22} strokeWidth={1.5} className="sidebar-icon" />
-              <span className="sidebar-text">Przeglądy [AI]</span>
-            </button>
           </nav>
+
+          {isLoggedIn && isSidebarExpanded && (
+            <div className="sidebar-history fade-in">
+              <div className="sidebar-history-title">Ostatnie rozmowy</div>
+              <div className="sidebar-history-list">
+                {[
+                  'Wymagania dla przeglądu rocznego', 
+                  'Założenie konta dla inwestora', 
+                  'Uprawnienia budowlane w cKOB', 
+                  'Dodanie wpisu o kontroli kominiarskiej', 
+                  'Zgłoszenie katastrofy budowlanej', 
+                  'Błędy przy dodawaniu załącznika', 
+                  'Oświadczenie kierownika budowy',
+                  'Kalkulacja kubatury z pozwolenia'
+                ].map((item, idx) => (
+                  <button key={idx} className="sidebar-history-item" onClick={() => { setView('search'); setSelectedNewsId(null); }}>
+                    <MessageSquare size={16} className="sidebar-history-icon" />
+                    <span className="sidebar-history-text">{item}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="sidebar-bottom">
-          <button 
-            className={`sidebar-link ${view === 'admin' ? 'active' : ''}`}
-            onClick={() => setView('admin')}
-          >
-            <Settings size={22} strokeWidth={1.5} className="sidebar-icon" />
-            <span className="sidebar-text">Panel Admina</span>
-          </button>
-          <button 
-            className="sidebar-link"
-            onClick={() => setShowAuthModal(true)}
-          >
-            <LogIn size={22} strokeWidth={1.5} className="sidebar-icon" />
-            <span className="sidebar-text">Logowanie</span>
-          </button>
+          {userEmail === 'przemek.rakotny@gmail.com' && (
+            <button 
+              className={`sidebar-link ${view === 'admin' ? 'active' : ''}`}
+              onClick={() => setView('admin')}
+            >
+              <Settings size={22} strokeWidth={1.5} className="sidebar-icon" />
+              <span className="sidebar-text">Panel Admina</span>
+            </button>
+          )}
+          
+          {isLoggedIn ? (
+            <button className="sidebar-link" onClick={handleLogout}>
+              <LogOut size={22} strokeWidth={1.5} className="sidebar-icon" />
+              <span className="sidebar-text">Wyloguj się</span>
+            </button>
+          ) : (
+            <button className="sidebar-link" onClick={() => setShowAuthModal(true)}>
+              <LogIn size={22} strokeWidth={1.5} className="sidebar-icon" />
+              <span className="sidebar-text">Logowanie</span>
+            </button>
+          )}
         </div>
       </aside>
       
       <main className="main-content">
-        {view === 'search' && <SearchHero />}
-        {view === 'admin' && <AdminPanel />}
-        {view === 'inspections' && <InspectionModule />}
-        {view === 'discover' && (
-          selectedNewsId ? (
-            <NewsDetail id={selectedNewsId} onBack={handleBackToDiscover} />
-          ) : (
-            <DiscoverDashboard onCardClick={handleNewsClick} />
-          )
+        {!isLoggedIn ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666' }}>
+            <Layers size={64} style={{ marginBottom: 24, opacity: 0.2 }} />
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 500, marginBottom: 12 }}>Witaj w BimOS</h2>
+            <p style={{ maxWidth: 400, textAlign: 'center', lineHeight: 1.6 }}>Zaloguj się, aby uzyskać dostęp do bazy wiedzy cKOB oraz platformy inżynierskiej.</p>
+            <button 
+              onClick={() => setShowAuthModal(true)}
+              style={{ marginTop: 24, padding: '12px 24px', background: '#2563eb', color: 'white', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Zaloguj się teraz
+            </button>
+          </div>
+        ) : (
+          <>
+            {view === 'search' && <SearchHero />}
+            {view === 'admin' && <AdminPanel />}
+            {view === 'discover' && (
+              selectedNewsId ? (
+                <NewsDetail id={selectedNewsId} onBack={handleBackToDiscover} />
+              ) : (
+                <DiscoverDashboard onCardClick={handleNewsClick} />
+              )
+            )}
+          </>
         )}
       </main>
 
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} onSuccess={handleLoginSuccess} />}
 
       <style>{`
         .app {
@@ -130,6 +191,86 @@ function App() {
           display: flex;
           flex-direction: column;
           gap: 12px;
+        }
+
+        .sidebar-top {
+          flex: 1;
+          min-height: 0;
+        }
+
+        .sidebar-history {
+          margin-top: 24px;
+          padding: 0 16px;
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-height: 0;
+        }
+
+        .sidebar-history-title {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          color: #999;
+          font-weight: 600;
+          margin-bottom: 12px;
+          padding-left: 8px;
+          letter-spacing: 0.5px;
+        }
+
+        .sidebar-history-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          overflow-y: auto;
+          flex: 1;
+          padding-right: 4px;
+        }
+
+        .sidebar-history-list::-webkit-scrollbar {
+          width: 4px;
+        }
+        .sidebar-history-list::-webkit-scrollbar-thumb {
+          background: rgba(0,0,0,0.1);
+          border-radius: 4px;
+        }
+
+        .sidebar-history-item {
+          display: flex;
+          align-items: center;
+          padding: 10px 12px;
+          background: none;
+          border: none;
+          color: #555;
+          cursor: pointer;
+          border-radius: 6px;
+          transition: all 0.2s;
+          text-align: left;
+        }
+
+        .sidebar-history-item:hover {
+          background: rgba(0,0,0,0.04);
+          color: #1a1a1a;
+        }
+
+        .sidebar-history-icon {
+          margin-right: 12px;
+          flex-shrink: 0;
+          color: #888;
+        }
+
+        .sidebar-history-text {
+          font-size: 0.85rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        @keyframes fadeInHistory {
+          from { opacity: 0; transform: translateY(-5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+          animation: fadeInHistory 0.3s ease-out forwards;
         }
 
         .sidebar-logo {

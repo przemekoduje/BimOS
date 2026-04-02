@@ -23,9 +23,11 @@ const QuickNewsList: React.FC<QuickNewsListProps> = ({ onItemClick }) => {
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const response = await fetch('/automated_news.json');
+        const response = await fetch('/daily_update.json');
         const data = await response.json();
-        setNews(data);
+        if (data && data.news) {
+          setNews(data.news);
+        }
         setLoading(false);
       } catch (error) {
         console.error("Błąd ładowania legislacji:", error);

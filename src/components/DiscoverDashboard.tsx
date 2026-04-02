@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FeaturedStory from './FeaturedStory';
 import NewsCard from './NewsCard';
 import SidebarWidgets from './SidebarWidgets';
@@ -14,52 +14,27 @@ interface NewsItem {
   sourcesCount: number;
 }
 
-const FEATURE_STORY: NewsItem = {
-  id: 'f1',
-  title: 'Nowe regulacje drastycznie obniżają koszty certyfikacji niskoemisyjnej w 2024',
-  summary: 'Najnowsze wytyczne Ministerstwa Rozwoju z 31 marca znacząco zredukowały wymogi proceduralne dla małych i średnich inwestycji, co zwiększa presję na szybkie wdrażanie rozwiązań energooszczędnych i pasywnych w budownictwie wielorodzinnym.',
-  timestamp: '3 godziny temu',
-  sourcesCount: 14,
-  category: 'Przepisy',
-  imageUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800'
-};
-
-const SECONDARY_NEWS: NewsItem[] = [
-  {
-    id: 's1',
-    title: 'Autonomiczny dźwig z AI na warszawskiej budowie zawalił się dzień po premierze',
-    summary: '',
-    timestamp: '1 dzień temu',
-    sourcesCount: 42,
-    category: 'Technologia',
-    imageUrl: 'https://images.unsplash.com/photo-1541888941259-792739460a3b?auto=format&fit=crop&q=80&w=800'
-  },
-  {
-    id: 's2',
-    title: 'Zależność UE od technologii budowlanych spoza kontynentu – nowe raporty',
-    summary: '',
-    timestamp: '2 dni temu',
-    sourcesCount: 30,
-    category: 'Rynek',
-    imageUrl: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&q=80&w=800'
-  },
-  {
-    id: 's3',
-    title: 'Polska wykrywa luki w bezpieczeństwie systemów BIM dopiero po audycie',
-    summary: '',
-    timestamp: '3 dni temu',
-    sourcesCount: 15,
-    category: 'Technologia',
-    imageUrl: 'https://images.unsplash.com/photo-1503387762-592dea58ef23?auto=format&fit=crop&q=80&w=800'
-  }
-];
-
 interface DiscoverDashboardProps {
   onCardClick: (id: string) => void;
 }
 
 const DiscoverDashboard: React.FC<DiscoverDashboardProps> = ({ onCardClick }) => {
   const [activeTab, setActiveTab] = useState('Dla Ciebie');
+  const [newsList, setNewsList] = useState<NewsItem[]>([]);
+
+  useEffect(() => {
+    fetch('/daily_update.json')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.news) {
+          setNewsList(data.news);
+        }
+      })
+      .catch(err => console.error("Could not fetch news data:", err));
+  }, []);
+
+  const featureStory = newsList.length > 0 ? newsList[0] : null;
+  const secondaryNews = newsList.length > 1 ? newsList.slice(1, 4) : [];
 
   return (
     <div className="discover-dashboard">
@@ -80,22 +55,28 @@ const DiscoverDashboard: React.FC<DiscoverDashboardProps> = ({ onCardClick }) =>
 
       <div className="discover-content">
         <main className="main-feed">
-          <FeaturedStory 
-            {...FEATURE_STORY}
-            onClick={onCardClick}
-          />
+          {featureStory ? (
+            <FeaturedStory 
+              {...featureStory}
+              onClick={onCardClick}
+            />
+          ) : (
+            <div style={{ padding: 24, textAlign: 'center', background: '#fff', borderRadius: 12 }}>
+              Pobieranie wiodącej wiadomości...
+            </div>
+          )}
           
           <div className="secondary-grid">
-            {SECONDARY_NEWS.map(news => (
-              <NewsCard 
-                key={news.id}
-                id={news.id}
-                title={news.title}
-                category={news.category}
-                imageUrl={news.imageUrl}
-                onClick={onCardClick}
-              />
-            ))}
+            {secondaryNews.map(news => (
+               <NewsCard 
+                 key={news.id}
+                 id={news.id}
+                 title={news.title}
+                 category={news.category}
+                 imageUrl={news.imageUrl}
+                 onClick={onCardClick}
+               />
+             ))}
           </div>
           
           <div className="more-news-item">

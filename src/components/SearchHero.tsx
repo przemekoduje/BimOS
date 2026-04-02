@@ -7,6 +7,7 @@ import { askKnowledgeBase, type ChatMessage } from '../services/aiService';
 import NewsGrid from './NewsGrid';
 import QuickNewsList from './QuickNewsList';
 import NewsDetail from './NewsDetail';
+import Footer from './Footer';
 import './SearchHero.css';
 
 // --- COMPONENTS ---
@@ -57,39 +58,26 @@ const TooltipLink = ({ title, children }: { title: string, children: React.React
   );
 };
 
+const normalizeAiContent = (content: string) => {
+  return content
+    .replace(/\[([^\]]+)\]\(# "([^"]+)"\)/g, '[[[$1:::$2]]]') // stary format 1
+    .replace(/\[([^\]]+)\]\(#tooltip:([^)]+)\)/g, '[[[$1:::$2]]]') // alternatywa AI
+    .replace(/\[([^\]]+)\]\(tooltip:([^)]+)\)/g, '[[[$1:::$2]]]') // stary format 2
+    .replace(/\[\[(.*?)::(.*?)\]\]/g, '[[[$1:::$2]]]'); // nowy format
+};
+
 /**
- * Animowany tekst odpowiedzi (Premium Reveal) z obsługą dymków w każdym elemencie Markdown
+ * Animowany tekst odpowiedzi za pomocą masek CSS (gradient top-to-bottom)
+ * Wyświetla cały tekst natychmiast, całkowicie zapobiegając rozpadom struktury Markdown, 
+ * i używa płynnego przejścia optycznego.
  */
-const AnimatedResponse: React.FC<{ content: string; isLast: boolean }> = ({ content, isLast }) => {
-  const [displayedText, setDisplayedText] = useState(isLast ? "" : content);
-  
-  useEffect(() => {
-    if (!isLast) {
-      setDisplayedText(content);
-      return;
-    }
-    
-    const words = content.split(' ');
-    let currentIdx = 0;
-    setDisplayedText("");
-
-    const interval = setInterval(() => {
-      if (currentIdx >= words.length) {
-        clearInterval(interval);
-        return;
-      }
-      const nextWord = words[currentIdx];
-      setDisplayedText(prev => (prev ? prev + " " + nextWord : nextWord));
-      currentIdx++;
-    }, 25);
-
-    return () => clearInterval(interval);
-  }, [content, isLast]);
+const PremiumRevealResponse: React.FC<{ content: string; isLast: boolean }> = ({ content, isLast }) => {
+  const normContent = normalizeAiContent(content);
 
   const parseWithTooltips = (text: string) => {
     const parts = [];
     let lastIndex = 0;
-    const tagRegex = /\[\[(.*?)::(.*?)\]\]/g;
+    const tagRegex = /\[\[\[(.*?):::(.*?)\]\]\]/g;
     let match;
 
     while ((match = tagRegex.exec(text)) !== null) {
@@ -110,21 +98,25 @@ const AnimatedResponse: React.FC<{ content: string; isLast: boolean }> = ({ cont
   const renderWithTooltips = (children: React.ReactNode): React.ReactNode => {
     return React.Children.map(children, child => {
       if (typeof child === 'string') return parseWithTooltips(child);
-      if (React.isValidElement(child) && child.props.children) {
-        return React.cloneElement(child, {
-          ...child.props,
-          children: renderWithTooltips(child.props.children)
-        });
+      if (React.isValidElement(child)) {
+        const props = child.props as any;
+        if (props.children) {
+          return React.cloneElement(child, {
+            ...props,
+            children: renderWithTooltips(props.children)
+          });
+        }
       }
       return child;
     });
   };
 
-  const dopytaniaIdx = displayedText.indexOf('[DOPYTANIA_START]');
-  const mainText = dopytaniaIdx !== -1 ? displayedText.substring(0, dopytaniaIdx).trim() : displayedText;
+  let endIdx = normContent.indexOf('[DOPYTANIA_START]');
+  if (endIdx === -1) endIdx = normContent.indexOf('### Możesz zapytać');
+  const mainText = endIdx !== -1 ? normContent.substring(0, endIdx).trim() : normContent;
 
   return (
-    <div className="markdown-content reveal-animation">
+    <div className={`markdown-content ${isLast ? 'reveal-animation' : ''}`}>
       <ReactMarkdown 
         remarkPlugins={[remarkGfm]}
         components={{
@@ -161,8 +153,22 @@ const SearchHero: React.FC = () => {
   }, [query]);
 
   useEffect(() => {
-    if (isLoading || chatHistory.length > 0) {
+    if (isLoading) {
+      // Podczas wczytywania – przesuń na dół by widzieć Loader "Inicjowanie"
       chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else if (chatHistory.length > 0) {
+      const lastMessage = chatHistory[chatHistory.length - 1];
+      if (lastMessage.role === 'ai') {
+        // Po otrzymaniu odpowiedzi przewiń do Pytania Użytkownika (zawsze o 1 indeks z tyłu), 
+        // by móc wygodnie przzeczytać pełen kontekst od góry do dołu.
+        const userMsgIdx = chatHistory.length - 2;
+        const el = document.getElementById(`msg-${userMsgIdx >= 0 ? userMsgIdx : 0}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } else {
+        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   }, [isLoading, loadingStatusText, chatHistory.length]);
 
@@ -198,16 +204,18 @@ const SearchHero: React.FC = () => {
   };
 
   const extractQuestions = (content: string) => {
-    const dopytaniaIdx = content.indexOf('[DOPYTANIA_START]');
-    if (dopytaniaIdx === -1) return [];
-    const questionsPart = content.substring(dopytaniaIdx + '[DOPYTANIA_START]'.length).trim();
+    const norm = normalizeAiContent(content);
+    const match = norm.match(/\[DOPYTANIA_START\]|Możesz zapytać/i);
+    if (!match) return [];
+    
+    const questionsPart = norm.substring(match.index! + match[0].length).trim();
     return questionsPart.split('\n')
       .map(q => q
         .replace(/^[-*•\d\.]+\s*/, '') // Czyść punktory
-        .replace(/\[\[(.*?)::.*?\]\]/g, '$1') // Usuń tagi dymków, zostaw sam termin
+        .replace(/\[\[\[(.*?):::(.*?)\]\]\]/g, '$1') // Usuń tagi dymków z uwzględnieniem nowego normalizatora
         .trim()
       )
-      .filter(q => q.length > 5)
+      .filter(q => q.length > 5 && q.includes('?'))
       .slice(0, 3);
   };
 
@@ -218,104 +226,107 @@ const SearchHero: React.FC = () => {
   const isChatActive = chatHistory.length > 0;
 
   return (
-    <div className={`hero-container ${isChatActive ? 'chat-mode' : ''}`}>
-      <div className="hero-content">
-        {!isChatActive && <h1 className="hero-title">BimOS. Twoja inżynieria.</h1>}
-        
-        {isChatActive && (
-          <div className="chat-history-container">
-            {chatHistory.map((msg, idx) => {
-              const lastAiMessage = msg.role === 'ai' && idx === chatHistory.length - 1;
-              const questions = msg.role === 'ai' ? extractQuestions(msg.content) : [];
-              
-              return (
-                <div key={idx} id={`msg-${idx}`} className={`chat-bubble-row ${msg.role}`}>
-                  <div className="chat-bubble">
-                    {msg.role === 'ai' ? (
-                      <>
-                        <AnimatedResponse content={msg.content} isLast={lastAiMessage} />
-                        {questions.length > 0 && lastAiMessage && !isLoading && (
-                          <div className="suggestions-container">
-                            <div className="suggestions-divider">Dopytania uściślające</div>
-                            <div className="suggestions-chips">
-                              {questions.map((q, sIdx) => (
-                                <button key={sIdx} className="suggestion-chip" onClick={() => handleSearch(q)}>
-                                  <Zap size={14} className="chip-icon" />
-                                  <span>{q}</span>
-                                </button>
-                              ))}
+    <>
+      <div className={`hero-container ${isChatActive ? 'chat-mode' : ''}`}>
+        <div className="hero-content">
+          {!isChatActive && <h1 className="hero-title">BimOS. Czat cKOB.</h1>}
+          
+          {isChatActive && (
+            <div className="chat-history-container">
+              {chatHistory.map((msg, idx) => {
+                const lastAiMessage = msg.role === 'ai' && idx === chatHistory.length - 1;
+                const questions = msg.role === 'ai' ? extractQuestions(msg.content) : [];
+                
+                return (
+                  <div key={idx} id={`msg-${idx}`} className={`chat-bubble-row ${msg.role}`}>
+                    <div className="chat-bubble">
+                      {msg.role === 'ai' ? (
+                        <>
+                          <PremiumRevealResponse content={msg.content} isLast={lastAiMessage} />
+                          {questions.length > 0 && lastAiMessage && !isLoading && (
+                            <div className="suggestions-container">
+                              <div className="suggestions-divider">Dopytania uściślające</div>
+                              <div className="suggestions-chips">
+                                {questions.map((q, sIdx) => (
+                                  <button key={sIdx} className="suggestion-chip" onClick={() => handleSearch(q)}>
+                                    <Zap size={14} className="chip-icon" />
+                                    <span>{q}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <span className="user-text">{msg.content}</span>
-                    )}
+                          )}
+                        </>
+                      ) : (
+                        <span className="user-text">{msg.content}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {isLoading && (
+                <div className="chat-bubble-row ai">
+                  <div className="chat-bubble loading">
+                    <Loader2 className="spinning-loader" size={20} /> 
+                    <span className="loading-text-stage">{loadingStatusText || "Inicjowanie..."}</span>
                   </div>
                 </div>
-              );
-            })}
-            {isLoading && (
-              <div className="chat-bubble-row ai">
-                <div className="chat-bubble loading">
-                  <Loader2 className="spinning-loader" size={20} /> 
-                  <span className="loading-text-stage">{loadingStatusText || "Inicjowanie..."}</span>
+              )}
+              <div ref={chatBottomRef} style={{ height: 20 }} />
+            </div>
+          )}
+          
+          <div className="search-wrapper">
+            <div className="search-bar">
+              <textarea 
+                ref={textareaRef}
+                className="search-input" 
+                placeholder="Odpowiedź jest tam, gdzie Ty."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={1}
+              />
+              <div className="search-actions-row">
+                <div className="search-left-actions">
+                  <button className="search-action-btn"><Plus size={20} /></button>
+                </div>
+                <div className="search-right-actions">
+                  <button className="search-action-btn"><Mic size={20} /></button>
+                  <button className="send-button" onClick={() => handleSearch()} disabled={isLoading}>
+                    <Send size={18} />
+                  </button>
                 </div>
               </div>
-            )}
-            <div ref={chatBottomRef} style={{ height: 20 }} />
-          </div>
-        )}
-        
-        <div className="search-wrapper">
-          <div className="search-bar">
-            <textarea 
-              ref={textareaRef}
-              className="search-input" 
-              placeholder="Odpowiedź jest tam, gdzie Ty."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-            />
-            <div className="search-actions-row">
-              <div className="search-left-actions">
-                <button className="search-action-btn"><Plus size={20} /></button>
+            </div>
+            
+            <div className="search-footer">
+              <div className="footer-item">
+                <Globe size={14} /> <span>Baza Wiedzy: cKOB (v.1.0)</span>
               </div>
-              <div className="search-right-actions">
-                <button className="search-action-btn"><Mic size={20} /></button>
-                <button className="send-button" onClick={() => handleSearch()} disabled={isLoading}>
-                  <Send size={18} />
-                </button>
+              <div className="footer-item">
+                <Clock size={14} /> <span>Aktualizacja: 2024</span>
               </div>
             </div>
           </div>
-          
-          <div className="search-footer">
-            <div className="footer-item">
-              <Globe size={14} /> <span>Baza Wiedzy: cKOB (v.1.0)</span>
-            </div>
-            <div className="footer-item">
-              <Clock size={14} /> <span>Aktualizacja: 2024</span>
-            </div>
-          </div>
-        </div>
 
-        {!isChatActive && (
-          <>
-            <div className="quick-links">
-              <button className="pill" onClick={() => handleSearch("Kto ma obowiązek założyć wpis do cKOB?")}>Kto zakłada cKOB?</button>
-              <button className="pill" onClick={() => handleSearch("Jakie są kary za brak założonej książki obiektu?")}>Kary za brak wpisu</button>
-              <button className="pill" onClick={() => handleSearch("Do kiedy mam czas na przejście na cKOB?")}>Terminy cyfryzacji</button>
-            </div>
-            <QuickNewsList onItemClick={(text) => handleSearch(text)} />
-            <section className="dashboard-news-section">
-              <NewsGrid onCardClick={(id) => setSelectedNewsId(id)} />
-            </section>
-          </>
-        )}
+          {!isChatActive && (
+            <>
+              <div className="quick-links">
+                <button className="pill" onClick={() => handleSearch("Kto ma obowiązek założyć wpis do cKOB?")}>Kto zakłada cKOB?</button>
+                <button className="pill" onClick={() => handleSearch("Jakie są kary za brak założonej książki obiektu?")}>Kary za brak wpisu</button>
+                <button className="pill" onClick={() => handleSearch("Do kiedy mam czas na przejście na cKOB?")}>Terminy cyfryzacji</button>
+              </div>
+              <QuickNewsList onItemClick={(text) => handleSearch(text)} />
+              <section className="dashboard-news-section">
+                <NewsGrid onCardClick={(id) => setSelectedNewsId(id)} />
+              </section>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+      {!isChatActive && <Footer />}
+    </>
   );
 };
 

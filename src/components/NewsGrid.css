@@ -1,73 +1,29 @@
 .news-grid-container {
   width: 100%;
-  max-width: 1080px;
-  margin-top: 40px;
+  max-width: 900px;
+  margin: 40px auto 0;
 }
 
 .news-grid-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 24px;
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
-  padding-top: 24px;
 }
 
-.news-filter-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: none;
-  border: none;
-  color: #666;
-  font-size: 0.9rem;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.news-filter-btn:hover {
-  background: #f5f5f7;
+.news-grid-title {
+  font-size: 1.1rem;
+  font-weight: 600;
   color: #1a1a1a;
-}
-
-.news-filter-btn.active {
-  color: #1a1a1a;
-  font-weight: 500;
+  margin: 0;
 }
 
 .news-grid {
-  display: flex;
-  flex-direction: row;
-  overflow-x: auto;
-  gap: 24px;
-  padding-bottom: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding-bottom: 40px;
 }
 
-/* Custom scrollbar for news-grid */
-.news-grid::-webkit-scrollbar {
-  height: 8px;
-}
-
-.news-grid::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-.news-grid::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 4px;
-}
-
-.news-grid::-webkit-scrollbar-thumb:hover {
-  background: #aaa;
-}
-
-@media (max-width: 600px) {
-  .news-grid-header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
+@media (max-width: 768px) {
+  .news-grid {
+    grid-template-columns: 1fr;
   }
 }

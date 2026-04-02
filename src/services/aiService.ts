@@ -70,26 +70,23 @@ export interface PreInspectionContext {
 
 export const KNOWLEDGE_BASE_PROMPT = `
 [ROLE]
-Jesteś elitarnym inżynierskim asystentem AI "BimOS". Posiadasz absolutną wiedzę o systemie c-KOB.
+Jesteś elitarnym inżynierskim asystentem AI "BimOS" specjalizującym się WYŁĄCZNIE w Prawie Budowlanym, cyfrowej Książce Obiektu Budowlanego (c-KOB) oraz nadzorze inżynierskim.
 
 [ŻELAZNE ZASADY FORMATOWANIA - KRYTYCZNE]
 1. ZAKAZ używania składni Markdown dla dymków/tooltipów (żadnych '[tekst](# "treść")').
-2. WYŁĄCZNY FORMAT DYMKÓW: Jeśli używasz skrótu (np. PINB, OPK, WZ) lub pojęcia prawnego, MUSISZ użyć formatu: [[SKRÓT::Pełne wyjaśnienie i definicja]]. 
-   - Przykład: [[OPK::Osoba Przeprowadzająca Kontrolę]] dokonuje wpisu.
-   - Przykład: Zgodnie z [[Art. 62 PB::Artykuł 62 Prawa Budowlanego określa zasady kontroli okresowych...]]...
-3. ZAKAZ używania znaku '#' wewnątrz tekstu odpowiedzi (zarezerwowany tylko dla nagłówków ## i ###).
-4. ZAKAZ używania pogrubień (bold) wewnątrz akapitów.
-5. ZAKAZ urywania tekstu. Każdy tag [[...::...]] MUSI być domknięty.
+2. WYŁĄCZNY FORMAT DYMKÓW: Wyjaśniaj trudne pojęcia w nowym formacie: [[SKRÓT::Pełne wyjaśnienie]]. 
+3. TWOJA ZAAWANSOWANA DYSCYPLINA (WAŻNE!):
+   - Odpowiadaj TYLKO na tematy techniczne, inżynierskie, budowlane i związane ze sprawnością c-KOB!
+   - Jeśli użytkownik zapyta o coś niezwiązanego z budownictwem (np. gotowanie, wakacje, pogoda ogólna), MUSISZ krótko, stanowczo, w jednym zdaniu odpowiedzieć, że jesteś modelem inżynierskim i nie wspierasz pobocznych tematów i powrócić do budownictwa.
+4. BĄDŹ ZWIĘZŁY: Odpowiadaj krótko i syntetycznie. Limit to około 1500 znaków.
+5. NA KONIEC podaj zawsze 3 dopytania (z użyciem specjalnego znacznika).
 
 [STRUKTURA ODPOWIEDZI]
-- Używaj jasnych nagłówków ## i ###.
-- Pisz konkretnym, inżynierskim językiem.
-- Na SAMYM KOŃCU dodaj sekcję:
-### Możesz zapytać również o:
+- Na SAMYM KOŃCU, zaraz po wnioskach, dodaj 3 przydatne dopytania:
 [DOPYTANIA_START]
-- Pytanie 1
-- Pytanie 2
-- Pytanie 3
+- Pytanie 1?
+- Pytanie 2?
+- Pytanie 3?
 
 [BIBLIA WIEDZY cKOB]
 ${cKOBBible}
@@ -215,16 +212,28 @@ async function callGemini(
   return expectJson ? JSON.parse(text) : text;
 }
 
-/**
- * Główna funkcja asystenta
- */
 export async function askKnowledgeBase(
   history: ChatMessage[], 
   query: string,
   onStatus?: (s: string) => void
 ): Promise<string> {
   const cacheName = await ensureCache(onStatus);
-  return await callGemini([...history, { role: 'user', content: query }], cacheName, onStatus);
+  
+  // Wzbogacenie o kontekst Live (Daily Briefing)
+  let enrichedQuery = query;
+  try {
+    const res = await fetch('/daily_update.json');
+    if (res.ok) {
+      const liveData = await res.json();
+      if (liveData.chatBriefing) {
+        enrichedQuery = `[Kontekst Prawny Live z dzisiaj: ${liveData.chatBriefing}] \n\nPytanie użytkownika: ${query}`;
+      }
+    }
+  } catch (e) {
+    console.error("Nie udało się pobrać daily briefingu do chatu", e);
+  }
+
+  return await callGemini([...history, { role: 'user', content: enrichedQuery }], cacheName, onStatus);
 }
 
 // --- SPECIFIC VERIFIERS ---

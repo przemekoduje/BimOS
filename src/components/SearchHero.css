@@ -277,6 +277,33 @@
   to { opacity: 1; transform: translateX(-50%) translateY(calc(-100% - 8px)); }
 }
 
+/* --- REVEAL ANIMACJA (Premium Fade In) --- */
+.reveal-animation {
+  -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+  -webkit-mask-size: 100% 200%;
+  -webkit-mask-position: 0% 100%;
+  mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+  mask-size: 100% 200%;
+  mask-position: 0% 100%;
+  animation: maskReveal 1.2s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+@keyframes maskReveal {
+  0% {
+    -webkit-mask-position: 0% 100%;
+    mask-position: 0% 100%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    -webkit-mask-position: 0% 0%;
+    mask-position: 0% 0%;
+    opacity: 1;
+  }
+}
+
 /* --- SUGGESTIONS CHIPS (DOPYTANIA) --- */
 .suggestions-container {
   margin-top: 2rem;

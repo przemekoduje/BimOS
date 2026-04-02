@@ -19,6 +19,8 @@ interface EnrichmentStatus {
 }
 
 const AdminPanel: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics'>('ecrub');
+  
   const [engineers, setEngineers] = useState<Engineer[]>([]);
   const [filtered, setFiltered] = useState<Engineer[]>([]);
   const [search, setSearch] = useState('');
@@ -203,164 +205,270 @@ const AdminPanel: React.FC = () => {
   const currentItems = filtered.slice(startIndex, startIndex + pageSize);
 
   return (
-    <div className="admin-container">
-      <aside className="admin-sidebar">
-        <div className="sidebar-header">
-          <UserCheck size={20} />
-          <span>Filtry e-CRUB</span>
-        </div>
-        
-        <div className="filter-group">
-          <label>Województwo</label>
-          <select value={filters.province} onChange={e => setFilters({...filters, province: e.target.value})}>
-            <option value="">Wszystkie</option>
-            {uniqueProvinces.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label>Specjalność</label>
-          <select value={filters.speciality} onChange={e => setFilters({...filters, speciality: e.target.value})}>
-            <option value="">Wszystkie</option>
-            {uniqueSpecialities.map(s => <option key={s} value={s}>{s.substring(0, 30)}...</option>)}
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label className="checkbox-label">
-            <input 
-              type="checkbox" 
-              checked={filters.hasEmail} 
-              onChange={e => setFilters({...filters, hasEmail: e.target.checked})} 
-            />
-            <span>Posiada Email</span>
-          </label>
-          <label className="checkbox-label">
-            <input 
-              type="checkbox" 
-              checked={filters.hasPhone} 
-              onChange={e => setFilters({...filters, hasPhone: e.target.checked})} 
-            />
-            <span>Posiada Telefon</span>
-          </label>
-        </div>
-
-        <button className="refresh-btn" onClick={() => window.location.reload()}>
-          <RefreshCw size={16} />
-          <span>Odśwież bazę</span>
+    <div className="admin-container" style={{ flexDirection: 'column' }}>
+      
+      {/* Pasek Nawigacji Wewnętrznej Zakładek */}
+      <div style={{ display: 'flex', gap: 16, padding: '20px 24px', borderBottom: '1px solid #eee', background: '#fff' }}>
+        <button 
+          onClick={() => setActiveTab('ecrub')}
+          style={{ padding: '8px 16px', background: activeTab === 'ecrub' ? '#eff6ff' : 'transparent', color: activeTab === 'ecrub' ? '#2563eb' : '#666', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
+        >
+          Baza Inżynierów (e-CRUB)
         </button>
-      </aside>
+        <button 
+          onClick={() => setActiveTab('users')}
+          style={{ padding: '8px 16px', background: activeTab === 'users' ? '#eff6ff' : 'transparent', color: activeTab === 'users' ? '#2563eb' : '#666', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
+        >
+          Zarządzanie Użytkownikami
+        </button>
+        <button 
+          onClick={() => setActiveTab('analytics')}
+          style={{ padding: '8px 16px', background: activeTab === 'analytics' ? '#eff6ff' : 'transparent', color: activeTab === 'analytics' ? '#2563eb' : '#666', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
+        >
+          Analityka SEO / Ruch Webowy
+        </button>
+      </div>
 
-      <main className="admin-main">
-        <header className="admin-header">
-          <div className="search-box">
-            <Search size={18} />
-            <input 
-              placeholder="Szukaj po nazwisku lub numerze uprawnień..." 
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="header-stats">
-            Znaleziono: <strong>{filtered.length}</strong>
-          </div>
-          <div className="header-actions">
-            <div className="toggle-wrapper">
-              <span className="toggle-label">Wyszukiwanie AI w tle</span>
-              <label className="switch">
-                <input 
-                  type="checkbox" 
-                  checked={scriptStatus?.status === 'running'}
-                  onChange={handleToggleScript}
-                />
-                <span className="slider round"></span>
-              </label>
-            </div>
-            
-            <button className="enrich-status-btn" onClick={() => setIsModalOpen(true)}>
-              <div className="status-indicator-container">
-                <Activity size={18} />
-                {scriptStatus?.status === 'running' && <span className="running-indicator pulse-dot"></span>}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        
+        {/* WIDOK: E-CRUB */}
+        {activeTab === 'ecrub' && (
+          <>
+            <aside className="admin-sidebar">
+              <div className="sidebar-header">
+                <UserCheck size={20} />
+                <span>Filtry e-CRUB</span>
               </div>
-              Status Wzbogacania
-            </button>
-            <button className="export-btn">
-              <Download size={18} />
-              Eksportuj CSV
-            </button>
-          </div>
-        </header>
+              
+              <div className="filter-group">
+                <label>Województwo</label>
+                <select value={filters.province} onChange={e => setFilters({...filters, province: e.target.value})}>
+                  <option value="">Wszystkie</option>
+                  {uniqueProvinces.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
 
-        <div className="table-wrapper">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Imię i Nazwisko</th>
-                <th>Tytuł</th>
-                <th>Nr Uprawnień</th>
-                <th>Miejscowość</th>
-                <th>Kontakt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentItems.map(eng => (
-                <tr key={eng.id}>
-                  <td className="bold">{eng.name}</td>
-                  <td>{eng.title}</td>
-                  <td><code className="license">{eng.licenseNumber}</code></td>
-                  <td>{eng.city}</td>
-                  <td>
-                    <div className="contact-info-cell">
-                      {eng.email ? (
-                        <div className="contact-item">
-                          <span className="tag email">Email</span>
-                          <span className="contact-value">{eng.email}</span>
-                        </div>
-                      ) : (
-                        <span className="tag missing">Brak maila</span>
-                      )}
-                      {eng.phone && (
-                        <div className="contact-item">
-                          <span className="tag phone">Tel</span>
-                          <span className="contact-value">{eng.phone}</span>
-                        </div>
-                      )}
+              <div className="filter-group">
+                <label>Specjalność</label>
+                <select value={filters.speciality} onChange={e => setFilters({...filters, speciality: e.target.value})}>
+                  <option value="">Wszystkie</option>
+                  {uniqueSpecialities.map(s => <option key={s} value={s}>{s.substring(0, 30)}...</option>)}
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label className="checkbox-label">
+                  <input 
+                    type="checkbox" 
+                    checked={filters.hasEmail} 
+                    onChange={e => setFilters({...filters, hasEmail: e.target.checked})} 
+                  />
+                  <span>Posiada Email</span>
+                </label>
+                <label className="checkbox-label">
+                  <input 
+                    type="checkbox" 
+                    checked={filters.hasPhone} 
+                    onChange={e => setFilters({...filters, hasPhone: e.target.checked})} 
+                  />
+                  <span>Posiada Telefon</span>
+                </label>
+              </div>
+
+              <button className="refresh-btn" onClick={() => window.location.reload()}>
+                <RefreshCw size={16} />
+                <span>Odśwież bazę</span>
+              </button>
+            </aside>
+
+            <main className="admin-main">
+              <header className="admin-header">
+                <div className="search-box">
+                  <Search size={18} />
+                  <input 
+                    placeholder="Szukaj po nazwisku lub numerze uprawnień..." 
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                </div>
+                <div className="header-stats">
+                  Znaleziono: <strong>{filtered.length}</strong>
+                </div>
+                <div className="header-actions">
+                  <div className="toggle-wrapper">
+                    <span className="toggle-label">Wyszukiwanie AI w tle</span>
+                    <label className="switch">
+                      <input 
+                        type="checkbox" 
+                        checked={scriptStatus?.status === 'running'}
+                        onChange={handleToggleScript}
+                      />
+                      <span className="slider round"></span>
+                    </label>
+                  </div>
+                  
+                  <button className="enrich-status-btn" onClick={() => setIsModalOpen(true)}>
+                    <div className="status-indicator-container">
+                      <Activity size={18} />
+                      {scriptStatus?.status === 'running' && <span className="running-indicator pulse-dot"></span>}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    Status Wzbogacania
+                  </button>
+                  <button className="export-btn">
+                    <Download size={18} />
+                    Eksportuj CSV
+                  </button>
+                </div>
+              </header>
 
-        <footer className="admin-footer">
-          <div className="pagination">
-            <button 
-              disabled={currentPage === 1} 
-              onClick={() => setCurrentPage(1)}
-              className="page-btn"
-            >Pierwsza</button>
-            <button 
-              disabled={currentPage === 1} 
-              onClick={() => setCurrentPage(prev => prev - 1)}
-              className="page-btn"
-            >Poprzednia</button>
-            <span className="page-info">
-              Strona <strong>{currentPage}</strong> z <strong>{totalPages}</strong>
-            </span>
-            <button 
-              disabled={currentPage === totalPages || totalPages === 0} 
-              onClick={() => setCurrentPage(prev => prev + 1)}
-              className="page-btn"
-            >Następna</button>
-            <button 
-              disabled={currentPage === totalPages || totalPages === 0} 
-              onClick={() => setCurrentPage(totalPages)}
-              className="page-btn"
-            >Ostatnia</button>
-          </div>
-        </footer>
-      </main>
+              <div className="table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Imię i Nazwisko</th>
+                      <th>Tytuł</th>
+                      <th>Nr Uprawnień</th>
+                      <th>Miejscowość</th>
+                      <th>Kontakt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentItems.map(eng => (
+                      <tr key={eng.id}>
+                        <td className="bold">{eng.name}</td>
+                        <td>{eng.title}</td>
+                        <td><code className="license">{eng.licenseNumber}</code></td>
+                        <td>{eng.city}</td>
+                        <td>
+                          <div className="contact-info-cell">
+                            {eng.email ? (
+                              <div className="contact-item">
+                                <span className="tag email">Email</span>
+                                <span className="contact-value">{eng.email}</span>
+                              </div>
+                            ) : (
+                              <span className="tag missing">Brak maila</span>
+                            )}
+                            {eng.phone && (
+                              <div className="contact-item">
+                                <span className="tag phone">Tel</span>
+                                <span className="contact-value">{eng.phone}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <footer className="admin-footer">
+                <div className="pagination">
+                  <button 
+                    disabled={currentPage === 1} 
+                    onClick={() => setCurrentPage(1)}
+                    className="page-btn"
+                  >Pierwsza</button>
+                  <button 
+                    disabled={currentPage === 1} 
+                    onClick={() => setCurrentPage(prev => prev - 1)}
+                    className="page-btn"
+                  >Poprzednia</button>
+                  <span className="page-info">
+                    Strona <strong>{currentPage}</strong> z <strong>{totalPages}</strong>
+                  </span>
+                  <button 
+                    disabled={currentPage === totalPages || totalPages === 0} 
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    className="page-btn"
+                  >Następna</button>
+                  <button 
+                    disabled={currentPage === totalPages || totalPages === 0} 
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="page-btn"
+                  >Ostatnia</button>
+                </div>
+              </footer>
+            </main>
+          </>
+        )}
+
+        {/* WIDOK: USERS */}
+        {activeTab === 'users' && (
+          <main className="admin-main" style={{ padding: '32px' }}>
+            <h2 style={{ marginBottom: 24, fontSize: '1.5rem', fontWeight: 600 }}>Poczekalnia i Lista Uprawnionych (Whitelist)</h2>
+            <div className="table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Data Rejestracji</th>
+                    <th>E-mail Użytkownika</th>
+                    <th>Firma (Typ)</th>
+                    <th>Status</th>
+                    <th>Akcje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Dziś, 09:12</td>
+                    <td className="bold">test.inwestor@archicom.pl</td>
+                    <td>B2B (Deweloper)</td>
+                    <td><span className="tag missing">Oczekuje na dostęp</span></td>
+                    <td><button style={{ padding: '6px 12px', background: '#10b981', color: 'white', borderRadius: 4, border: 'none', cursor: 'pointer' }}>Zatwierdź Dostęp</button></td>
+                  </tr>
+                  <tr>
+                    <td>Wczoraj, 14:05</td>
+                    <td className="bold">jan.kowalski@pbud.pl</td>
+                    <td>Indywidualny</td>
+                    <td><span className="tag email">Aktywny</span></td>
+                    <td><button style={{ padding: '6px 12px', background: '#ef4444', color: 'white', borderRadius: 4, border: 'none', cursor: 'pointer' }}>Zablokuj</button></td>
+                  </tr>
+                  <tr>
+                    <td>21.03.2026</td>
+                    <td className="bold">anna.nowak@skanska.pl</td>
+                    <td>Enterprise</td>
+                    <td><span className="tag email">Aktywny</span></td>
+                    <td><button style={{ padding: '6px 12px', background: '#ef4444', color: 'white', borderRadius: 4, border: 'none', cursor: 'pointer' }}>Zablokuj</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </main>
+        )}
+
+        {/* WIDOK: ANALYTICS */}
+        {activeTab === 'analytics' && (
+          <main className="admin-main" style={{ padding: '32px' }}>
+            <h2 style={{ marginBottom: 24, fontSize: '1.5rem', fontWeight: 600 }}>Metryki Webowe i Zaangażowanie (Mock Analytics)</h2>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 32 }}>
+              <div style={{ background: '#f8fafc', padding: 24, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: 8 }}>Miesięczni Unikalni Testerzy</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>124</div>
+                <div style={{ fontSize: '0.85rem', color: '#10b981', marginTop: 8 }}>↑ 12% od ostatniego tygodnia</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: 24, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: 8 }}>Wypowiedzi AI (Wysłane Prompty)</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>3,482</div>
+                <div style={{ fontSize: '0.85rem', color: '#10b981', marginTop: 8 }}>↑ Szacowany koszt $4.12</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: 24, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: 8 }}>Użycie Bazy "e-CRUB"</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>89 wyszukań</div>
+                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 8 }}>Najpopularniejsze: "Kierownik Budowy"</div>
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', padding: 32, borderRadius: 12, border: '1px dashed #cbd5e1', textAlign: 'center', color: '#94a3b8' }}>
+              <Activity size={48} style={{ opacity: 0.3, marginBottom: 16 }} />
+              <h3 style={{ color: '#334155', fontWeight: 500 }}>Aby na żywo renderować interaktywne wykresy GA4</h3>
+              <p style={{ maxWidth: 400, margin: '12px auto' }}>Wklej <code>ID Metryki G-XXXXXXX</code> do pliku konfiguracyjnego `index.html` oraz zintegruj <i>@google-analytics/data</i>.</p>
+            </div>
+          </main>
+        )}
+
+      </div>
 
       {/* MODAL RAPORTU WZBOGACANIA */}
       {isModalOpen && (
