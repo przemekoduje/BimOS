@@ -49,7 +49,12 @@ const TooltipLink = ({ title, children }: { title: string, children: React.React
         <span className="tech-term">{children}</span>
       </span>
       {show && createPortal(
-        <div className="tech-tooltip-portal-box" style={{ top: pos.top, left: pos.left }}>
+        <div 
+          className="tech-tooltip-portal-box" 
+          style={{ top: pos.top, left: pos.left }}
+          onMouseEnter={() => setShow(true)}
+          onMouseLeave={() => setShow(false)}
+        >
           {title}
         </div>,
         document.body
@@ -59,6 +64,8 @@ const TooltipLink = ({ title, children }: { title: string, children: React.React
 };
 
 const normalizeAiContent = (content: string) => {
+  // We only handle explicit tooltips provided by the AI in the [[Term::Definition]] format.
+  // We no longer inject automated links to ISAP, as the user wants the actual article text.
   return content
     .replace(/\[([^\]]+)\]\(# "([^"]+)"\)/g, '[[[$1:::$2]]]') // stary format 1
     .replace(/\[([^\]]+)\]\(#tooltip:([^)]+)\)/g, '[[[$1:::$2]]]') // alternatywa AI

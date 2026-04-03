@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI Service for Gemini integration - BimOS "Iron Logic" Edition (v4)
  * @author Senior Dev / Antigravity
  */
@@ -70,30 +70,26 @@ export interface PreInspectionContext {
 
 export const KNOWLEDGE_BASE_PROMPT = `
 [ROLE]
-Jesteś elitarnym inżynierskim asystentem AI "BimOS" specjalizującym się WYŁĄCZNIE w Prawie Budowlanym, cyfrowej Książce Obiektu Budowlanego (c-KOB) oraz nadzorze inżynierskim.
+Jeste┼Ť elitarnym in┼╝ynierskim asystentem AI "BimOS". Posiadasz absolutn─ů wiedz─Ö o systemie c-KOB.
 
-[ŻELAZNE ZASADY FORMATOWANIA - KRYTYCZNIE WAŻNE]
-1. ZAKAZ używania składni Markdown dla dymków/tooltipów (żadnych '[tekst](# "treść")').
-2. WYŁĄCZNY FORMAT DYMKÓW: Jeśli używasz skrótu inżynieryjnego lub powołujesz się na konkretny przepis, MUSISZ użyć formatu: [[POJĘCIE::Dokładne wyjaśnienie lub cytat]]. 
-3. HIERARCHIA TAGOWANIA (PRIORYTET):
-   - Artykuły i ustępy (np. Art. 93, ust. 1, pkt 8) MAJĄ ABSOLUTNY PRIORYTET. 
-   - ZAKAZ tagowania samej nazwy ustawy "Prawo Budowlane" lub "PB", jeśli w zdaniu występuje konkretny numer artykułu. Taguj TYLKO numer artykułu.
-   - W dymku dla artykułu podawaj jego TREŚĆ z Biblii Wiedzy, a nie definicję dokumentu.
-   - PRZYKŁAD: "...kara grzywny na podstawie [[Art. 93::Art. 93 pkt 8 PB: Kto nie dokonuje wpisu w terminie 7 dni, podlega karze grzywny.]] Prawa Budowlanego..."
-4. ZAKAZ używania znaku '#' wewnątrz tekstu odpowiedzi (zarezerwowany tylko dla nagłówków ## i ###).
-5. ZAKAZ używania pogrubień (bold) wewnątrz akapitów.
-6. TWOJA ZAAWANSOWANA DYSCYPLINA:
-   - Odpowiadaj TYLKO na tematy techniczne, inżynierskie, budowlane i związane ze sprawnością c-KOB!
-   - BĄDŹ ZWIĘZŁY: Odpowiadaj krótko i syntetycznie.
-   - NIGDY NIE URYWAJ WYPOWIEDZI W POŁOWIE. Jeśli zaczynasz dymek [[...]], MUSISZ go zamknąć.
-7. NA KONIEC podaj zawsze 3 dopytania (z użyciem specjalnego znacznika [DOPYTANIA_START]).
+[┼╗ELAZNE ZASADY FORMATOWANIA - KRYTYCZNE]
+1. ZAKAZ u┼╝ywania sk┼éadni Markdown dla dymk├│w/tooltip├│w (┼╝adnych '[tekst](# "tre┼Ť─ç")').
+2. WY┼ü─äCZNY FORMAT DYMK├ôW: Je┼Ťli u┼╝ywasz skr├│tu (np. PINB, OPK, WZ) lub poj─Öcia prawnego, MUSISZ u┼╝y─ç formatu: [[SKR├ôT::Pe┼éne wyja┼Ťnienie i definicja]]. 
+   - Przyk┼éad: [[OPK::Osoba Przeprowadzaj─ůca Kontrol─Ö]] dokonuje wpisu.
+   - Przyk┼éad: Zgodnie z [[Art. 62 PB::Artyku┼é 62 Prawa Budowlanego okre┼Ťla zasady kontroli okresowych...]]...
+3. ZAKAZ u┼╝ywania znaku '#' wewn─ůtrz tekstu odpowiedzi (zarezerwowany tylko dla nag┼é├│wk├│w ## i ###).
+4. ZAKAZ u┼╝ywania pogrubie┼ä (bold) wewn─ůtrz akapit├│w.
+5. ZAKAZ urywania tekstu. Ka┼╝dy tag [[...::...]] MUSI by─ç domkni─Öty.
 
 [STRUKTURA ODPOWIEDZI]
-- Na SAMYM KOŃCU, zaraz po wnioskach, dodaj 3 przydatne dopytania:
+- U┼╝ywaj jasnych nag┼é├│wk├│w ## i ###.
+- Pisz konkretnym, in┼╝ynierskim j─Özykiem.
+- Na SAMYM KO┼âCU dodaj sekcj─Ö:
+### Mo┼╝esz zapyta─ç r├│wnie┼╝ o:
 [DOPYTANIA_START]
-- Pytanie 1?
-- Pytanie 2?
-- Pytanie 3?
+- Pytanie 1
+- Pytanie 2
+- Pytanie 3
 
 [BIBLIA WIEDZY cKOB]
 ${cKOBBible}
@@ -104,13 +100,13 @@ ROLE: Exhaustive Technical Data Scraper / Senior Building Inspector.
 OBJECTIVE: Perform "Total Recall Extraction" of technical data from building protocols. 
 INSTRUCTIONS:
 1. READ EVERY WORD: Do not summarize. Do not skip rows. 
-2. SEARCH FOR NEGATIVES: Identify any mention of: "zły stan", "uszkodzone", "brak", "niekompletna", "nieszczelna", "pęknięcia", "odparzenia", "do wymiany", "zalecana naprawa".
+2. SEARCH FOR NEGATIVES: Identify any mention of: "z┼éy stan", "uszkodzone", "brak", "niekompletna", "nieszczelna", "p─Ökni─Öcia", "odparzenia", "do wymiany", "zalecana naprawa".
 3. NO HALLUCINATIONS: Only extract what is explicitly written in the text.
 ...
 `; // Truncated for brevity but fixed in full write
 
 export const PRE_INSPECTION_JSON_PROMPT = `
-Jesteś ekspertem ds. przeglądów budowlanych. Ekstrahuj JSON:
+Jeste┼Ť ekspertem ds. przegl─ůd├│w budowlanych. Ekstrahuj JSON:
 {
   "summary": "string",
   "technical_parameters": { ... },
@@ -119,28 +115,28 @@ Jesteś ekspertem ds. przeglądów budowlanych. Ekstrahuj JSON:
 `;
 
 export const CONSTRUCTION_VERIFICATION_PROMPT = `
-ROLE: Ekspert Nadzoru Inżynierskiego. Klasyfikuj usterkę do 8 filarów.
-Zwróć JSON: { "status": "SUCCESS", "pillar": 1, ... }
+ROLE: Ekspert Nadzoru In┼╝ynierskiego. Klasyfikuj usterk─Ö do 8 filar├│w.
+Zwr├│─ç JSON: { "status": "SUCCESS", "pillar": 1, ... }
 `;
 
 export const VOICE_LOG_STRUCTURE_PROMPT = `
-ROLE: NLP Inżynieria. Przekształć mowę w JSON c-KOB (Art. 60b).
+ROLE: NLP In┼╝ynieria. Przekszta┼é─ç mow─Ö w JSON c-KOB (Art. 60b).
 `;
 
 export const PROTOCOL_ANALYSIS_PROMPT = `
-Analiza protokołów branżowych. Zwróć JSON z typem i datą ważności.
+Analiza protoko┼é├│w bran┼╝owych. Zwr├│─ç JSON z typem i dat─ů wa┼╝no┼Ťci.
 `;
 
 export const TOOL_ANALYSIS_PROMPT = `
-Analiza odczytów z narzędzi (miarka, poziomica). Zwróć wartość i jednostkę w JSON.
+Analiza odczyt├│w z narz─Ödzi (miarka, poziomica). Zwr├│─ç warto┼Ť─ç i jednostk─Ö w JSON.
 `;
 
 export const AD_HOC_PROMPT = `
-Odpowiedź na zapytanie + Bounding Box AR. Zwróć JSON.
+Odpowied┼║ na zapytanie + Bounding Box AR. Zwr├│─ç JSON.
 `;
 
 export const AUTO_FRAME_PROMPT = `
-Live Radar Scaning. Zwróć JSON z "detected": true/false.
+Live Radar Scaning. Zwr├│─ç JSON z "detected": true/false.
 `;
 
 // --- CORE LOGIC ---
@@ -219,34 +215,22 @@ async function callGemini(
   return expectJson ? JSON.parse(text) : text;
 }
 
+/**
+ * G┼é├│wna funkcja asystenta
+ */
 export async function askKnowledgeBase(
   history: ChatMessage[], 
   query: string,
   onStatus?: (s: string) => void
 ): Promise<string> {
   const cacheName = await ensureCache(onStatus);
-  
-  // Wzbogacenie o kontekst Live (Daily Briefing)
-  let enrichedQuery = query;
-  try {
-    const res = await fetch('/daily_update.json');
-    if (res.ok) {
-      const liveData = await res.json();
-      if (liveData.chatBriefing) {
-        enrichedQuery = `[Kontekst Prawny Live z dzisiaj: ${liveData.chatBriefing}] \n\nPytanie użytkownika: ${query}`;
-      }
-    }
-  } catch (e) {
-    console.error("Nie udało się pobrać daily briefingu do chatu", e);
-  }
-
-  return await callGemini([...history, { role: 'user', content: enrichedQuery }], cacheName, onStatus);
+  return await callGemini([...history, { role: 'user', content: query }], cacheName, onStatus);
 }
 
 // --- SPECIFIC VERIFIERS ---
 
 export async function verifyConstruction(imageB64: string): Promise<VerificationResult> {
-  const prompt = `Analiza zdjęcia usterki. ${CONSTRUCTION_VERIFICATION_PROMPT}`;
+  const prompt = `Analiza zdj─Öcia usterki. ${CONSTRUCTION_VERIFICATION_PROMPT}`;
   const response = await callGemini([{ role: 'user', content: prompt + "\nIMAGE_DATA: " + imageB64 }], "", undefined, true);
   return response;
 }

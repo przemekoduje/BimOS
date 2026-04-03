@@ -552,3 +552,34 @@
     font-size: 2.5rem;
   }
 }
+
+/* --- ISAP LINKING STYLES --- */
+.tooltip-link-hint {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: center;
+}
+
+.isap-btn {
+  background-color: #0066cc;
+  color: white;
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: inline-block;
+  pointer-events: auto; /* Required as portal box has pointer-events: none */
+}
+
+.isap-btn:hover {
+  background-color: #0055aa;
+  transform: translateY(-1px);
+}
+
+.tech-tooltip-portal-box {
+  pointer-events: auto; /* Changed from none to allow clicking the link */
+}
