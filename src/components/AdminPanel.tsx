@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchEngineers, type Engineer } from '../services/engineerService';
 import { Search, Download, RefreshCw, UserCheck, Activity, X } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import './AdminPanel.css';
 
 interface EnrichmentLog {
@@ -18,8 +19,17 @@ interface EnrichmentStatus {
   totalChecked?: number;
 }
 
+interface Profile {
+  id: string;
+  email: string;
+  is_blocked: boolean;
+  created_at: string;
+}
+
 const AdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics'>('ecrub');
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [isProfilesLoading, setIsProfilesLoading] = useState(false);
   
   const [engineers, setEngineers] = useState<Engineer[]>([]);
   const [filtered, setFiltered] = useState<Engineer[]>([]);
@@ -107,6 +117,40 @@ const AdminPanel: React.FC = () => {
       console.error('Failed to toggle script', err);
     }
   };
+
+  const fetchProfiles = async () => {
+    setIsProfilesLoading(true);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching profiles:', error);
+    } else {
+      setProfiles(data || []);
+    }
+    setIsProfilesLoading(false);
+  };
+
+  const toggleBlockStatus = async (profileId: string, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_blocked: !currentStatus })
+      .eq('id', profileId);
+    
+    if (error) {
+      console.error('Error toggling block status:', error);
+    } else {
+      fetchProfiles();
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'users') {
+      fetchProfiles();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     fetchEngineers().then(data => {
@@ -410,27 +454,40 @@ const AdminPanel: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td>Dziś, 09:12</td>
-                    <td className="bold">test.inwestor@archicom.pl</td>
-                    <td>B2B (Deweloper)</td>
-                    <td><span className="tag missing">Oczekuje na dostęp</span></td>
-                    <td><button style={{ padding: '6px 12px', background: '#10b981', color: 'white', borderRadius: 4, border: 'none', cursor: 'pointer' }}>Zatwierdź Dostęp</button></td>
-                  </tr>
-                  <tr>
-                    <td>Wczoraj, 14:05</td>
-                    <td className="bold">jan.kowalski@pbud.pl</td>
-                    <td>Indywidualny</td>
-                    <td><span className="tag email">Aktywny</span></td>
-                    <td><button style={{ padding: '6px 12px', background: '#ef4444', color: 'white', borderRadius: 4, border: 'none', cursor: 'pointer' }}>Zablokuj</button></td>
-                  </tr>
-                  <tr>
-                    <td>21.03.2026</td>
-                    <td className="bold">anna.nowak@skanska.pl</td>
-                    <td>Enterprise</td>
-                    <td><span className="tag email">Aktywny</span></td>
-                    <td><button style={{ padding: '6px 12px', background: '#ef4444', color: 'white', borderRadius: 4, border: 'none', cursor: 'pointer' }}>Zablokuj</button></td>
-                  </tr>
+                  {isProfilesLoading ? (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '24px' }}>Ładowanie użytkowników...</td></tr>
+                  ) : profiles.length === 0 ? (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '24px' }}>Brak zarejestrowanych użytkowników.</td></tr>
+                  ) : profiles.map(profile => (
+                    <tr key={profile.id}>
+                      <td>{new Date(profile.created_at).toLocaleDateString()}</td>
+                      <td className="bold">{profile.email}</td>
+                      <td>{profile.email === 'przemek.rakotny@gmail.com' ? 'Administrator' : 'Użytkownik (MagicLink)'}</td>
+                      <td>
+                        <span className={`tag ${profile.is_blocked ? 'missing' : 'email'}`}>
+                          {profile.is_blocked ? 'Zablokowany' : 'Aktywny'}
+                        </span>
+                      </td>
+                      <td>
+                        <button 
+                          onClick={() => toggleBlockStatus(profile.id, profile.is_blocked)}
+                          disabled={profile.email === 'przemek.rakotny@gmail.com'}
+                          style={{ 
+                            padding: '6px 12px', 
+                            background: profile.is_blocked ? '#10b981' : '#ef4444', 
+                            color: 'white', 
+                            borderRadius: 4, 
+                            border: 'none', 
+                            cursor: profile.email === 'przemek.rakotny@gmail.com' ? 'not-allowed' : 'pointer',
+                            fontSize: '0.85rem',
+                            opacity: profile.email === 'przemek.rakotny@gmail.com' ? 0.5 : 1
+                          }}
+                        >
+                          {profile.is_blocked ? 'Odblokuj' : 'Zablokuj'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

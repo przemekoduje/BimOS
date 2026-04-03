@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Layers, Search, Compass, Settings, LogIn, LogOut, PanelLeftClose, PanelLeftOpen, MessageSquare } from 'lucide-react'
+import { supabase } from './lib/supabase'
 import SearchHero from './components/SearchHero'
 import AdminPanel from './components/AdminPanel'
 import DiscoverDashboard from './components/DiscoverDashboard'
@@ -12,29 +13,55 @@ function App() {
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  
-  // Weryfikacja stanu autoryzacji z localStorage
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('bimos_auth') === 'true';
-  });
-  const [userEmail, setUserEmail] = useState(() => {
-    return localStorage.getItem('bimos_email') || '';
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleLogout = () => {
-    localStorage.removeItem('bimos_auth');
-    localStorage.removeItem('bimos_email');
-    setIsLoggedIn(false);
-    setUserEmail('');
+  const ADMIN_EMAIL = 'przemek.rakotny@gmail.com';
+
+  useEffect(() => {
+    // Sprawdź aktualną sesję przy starcie
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setIsLoggedIn(true);
+        setUserEmail(session.user.email || '');
+      }
+      setIsLoading(false);
+    });
+
+    // Nasłuchuj zmian stanu autoryzacji
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const email = session.user.email || '';
+        setIsLoggedIn(true);
+        setUserEmail(email);
+        
+        // Jeśli to admin i właśnie się zalogował (prymitywne sprawdzenie zdarzenia SIGNED_IN)
+        if (email === ADMIN_EMAIL && _event === 'SIGNED_IN') {
+          setView('admin');
+        }
+      } else {
+        setIsLoggedIn(false);
+        setUserEmail('');
+        setView('search');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setView('search');
   };
 
   const handleLoginSuccess = (email: string) => {
-    localStorage.setItem('bimos_auth', 'true');
-    localStorage.setItem('bimos_email', email);
-    setIsLoggedIn(true);
-    setUserEmail(email);
     setShowAuthModal(false);
+    if (email === ADMIN_EMAIL) {
+      setView('admin');
+    } else {
+      setView('search');
+    }
   };
 
   const handleNewsClick = (id: string) => {
@@ -44,6 +71,14 @@ function App() {
   const handleBackToDiscover = () => {
     setSelectedNewsId(null);
   };
+
+  if (isLoading) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9f9f9' }}>
+        <div className="spinning-loader"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">

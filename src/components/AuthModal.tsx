@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Layers } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import './AuthModal.css';
 
 interface AuthModalProps {
@@ -10,34 +11,58 @@ interface AuthModalProps {
 const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string, type: 'error' | 'success' } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const ADMIN_EMAIL = 'przemek.rakotny@gmail.com';
-  const ADMIN_PASS = 'admin123'; // Dla celów testowych/MVP
 
   const handleSsoClick = () => {
-    setToastMessage('W obszarze darmowych testów, logowanie przez SSO (B2B) jest tymczasowo wyłączone.');
-    setTimeout(() => setToastMessage(null), 3000);
+    showToast('Logowanie SSO jest czasowo wyłączone.');
   };
 
-  const handleAuth = () => {
-    if (!email) return;
+  const showToast = (text: string, type: 'error' | 'success' = 'error') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
-    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-      if (!showPassword) {
-        setShowPassword(true);
-        return;
-      }
-      if (password === ADMIN_PASS) {
+  const handleAuth = async () => {
+    if (!email) {
+      showToast('Wprowadź e-mail.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+        if (!showPassword) {
+          setShowPassword(true);
+          setIsLoading(false);
+          return;
+        }
+
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        
         onSuccess(email);
       } else {
-        setToastMessage('Nieprawidłowe hasło administratora.');
-        setTimeout(() => setToastMessage(null), 3000);
+        // Regular user - Magic Link
+        const { error } = await supabase.auth.signInWithOtp({ 
+          email,
+          options: {
+            emailRedirectTo: window.location.origin
+          }
+        });
+        
+        if (error) throw error;
+        
+        showToast('Link logowania został wysłany na Twój e-mail!', 'success');
       }
-    } else {
-      // Inni użytkownicy - sam email wystarczy
-      onSuccess(email);
+    } catch (err: any) {
+      showToast(err.message || 'Wystąpił błąd autoryzacji.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -104,20 +129,29 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
               className={`auth-btn auth-btn-email ${email ? 'active' : ''}`}
               onClick={handleAuth}
               style={{ marginTop: 8 }}
+              disabled={isLoading}
             >
-              {showPassword ? 'Zaloguj jako Admin' : 'Kontynuuj z e-mailem'}
+              {isLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                  <div className="mini-loader"></div> <span>Przetwarzanie...</span>
+                </div>
+              ) : (
+                showPassword ? 'Zaloguj jako Admin' : 'Kontynuuj z e-mailem'
+              )}
             </button>
           </div>
           
           <a href="#" className="auth-sso-link" onClick={(e) => { e.preventDefault(); handleSsoClick(); }}>Jednolity dostęp (SSO)</a>
           
           {toastMessage && (
-            <div style={{
-              marginTop: 16, padding: '12px', background: '#fee2e2', color: '#991b1b', 
+            <div className={`auth-toast ${toastMessage.type}`} style={{
+              marginTop: 16, padding: '12px', 
+              background: toastMessage.type === 'error' ? '#fee2e2' : '#dcfce7', 
+              color: toastMessage.type === 'error' ? '#991b1b' : '#166534', 
               fontSize: '0.85rem', borderRadius: 6, textAlign: 'center',
               animation: 'fadeIn 0.2s'
             }}>
-              {toastMessage}
+              {toastMessage.text}
             </div>
           )}
         </div>
