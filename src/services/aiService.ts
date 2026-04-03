@@ -68,6 +68,7 @@ export interface PreInspectionContext {
 
 // --- PROMPTS ---
 
+// @BIMOS-STABLE-CHAT-V5-PROMPT-START (Kluczowy Prompt dla Dymków i Truncation Fix)
 export const KNOWLEDGE_BASE_PROMPT = `
 [ROLE]
 Jesteś elitarnym inżynierskim asystentem AI "BimOS" specjalizującym się WYŁĄCZNIE w Prawie Budowlanym, cyfrowej Książce Obiektu Budowlanego (c-KOB) oraz nadzorze inżynierskim.
@@ -98,6 +99,7 @@ Jesteś elitarnym inżynierskim asystentem AI "BimOS" specjalizującym się WYŁ
 [BIBLIA WIEDZY cKOB]
 ${cKOBBible}
 `;
+// @BIMOS-STABLE-CHAT-V5-PROMPT-END
 
 export const PRE_INSPECTION_PROMPT = `
 ROLE: Exhaustive Technical Data Scraper / Senior Building Inspector.
@@ -183,6 +185,7 @@ async function ensureCache(onStatus?: (s: string) => void): Promise<string> {
   }
 }
 
+// @BIMOS-STABLE-CHAT-V5-LOGIC-START (Kluczowa Logika API i Safety Settings)
 async function callGemini(
   messages: ChatMessage[], 
   cacheName: string,

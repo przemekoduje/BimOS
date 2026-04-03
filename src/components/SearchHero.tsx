@@ -12,6 +12,7 @@ import './SearchHero.css';
 
 // --- COMPONENTS ---
 
+// @BIMOS-STABLE-CHAT-V5-UI-COMPONENTS-START
 const TooltipLink = ({ title, children }: { title: string, children: React.ReactNode }) => {
   const [show, setShow] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -62,7 +63,9 @@ const TooltipLink = ({ title, children }: { title: string, children: React.React
     </>
   );
 };
+// @BIMOS-STABLE-CHAT-V5-UI-COMPONENTS-END
 
+// @BIMOS-STABLE-CHAT-V5-LOGIC-START
 const normalizeAiContent = (content: string) => {
   // We only handle explicit tooltips provided by the AI in the [[Term::Definition]] format.
   // We no longer inject automated links to ISAP, as the user wants the actual article text.
