@@ -1,6 +1,6 @@
 {
-  "status": "running",
-  "lastActive": "2026-04-03T10:26:36.453Z",
-  "message": "Rozpoczynanie procesu...",
+  "status": "stopped",
+  "lastActive": "2026-04-03T18:11:01.373Z",
+  "message": "Skrypt zatrzymany ręcznie.",
   "totalChecked": 0
 }

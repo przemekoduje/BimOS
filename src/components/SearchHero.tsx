@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { Send, Clock, Globe, Plus, Mic, Loader2, Zap } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { askKnowledgeBase, type ChatMessage } from '../services/aiService';
+import { askKnowledgeBase, type ChatMessage, fetchChatMessages, createNewChat, saveMessage } from '../services/aiService';
+import { getLatestUpdateDate } from '../services/knowledgeService';
 import NewsGrid from './NewsGrid';
 import QuickNewsList from './QuickNewsList';
 import NewsDetail from './NewsDetail';
@@ -146,15 +147,31 @@ const PremiumRevealResponse: React.FC<{ content: string; isLast: boolean }> = ({
 
 // --- MAIN COMPONENT ---
 
-const SearchHero: React.FC = () => {
+interface SearchHeroProps {
+  chatId: string | null;
+  onChatCreated: (id: string) => void;
+}
+
+const SearchHero: React.FC<SearchHeroProps> = ({ chatId, onChatCreated }) => {
   const [query, setQuery] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatusText, setLoadingStatusText] = useState("");
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
+  const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
+  const currentChatIdRef = useRef<string | null>(chatId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const isInitialLoadRef = useRef(true);
 
+  // Fetch dynamic update date from knowledge base
+  useEffect(() => {
+    getLatestUpdateDate()
+      .then(date => setLastUpdateDate(date))
+      .catch(() => setLastUpdateDate(null));
+  }, []);
+
+  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -162,44 +179,123 @@ const SearchHero: React.FC = () => {
     }
   }, [query]);
 
+  // Handle scrolling behavior
   useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
+    
     if (isLoading) {
-      // Podczas wczytywania – przesuń na dół by widzieć Loader "Inicjowanie"
-      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    } else if (chatHistory.length > 0) {
-      const lastMessage = chatHistory[chatHistory.length - 1];
-      if (lastMessage.role === 'ai') {
-        // Po otrzymaniu odpowiedzi przewiń do Pytania Użytkownika (zawsze o 1 indeks z tyłu), 
-        // by móc wygodnie przzeczytać pełen kontekst od góry do dołu.
-        const userMsgIdx = chatHistory.length - 2;
-        const el = document.getElementById(`msg-${userMsgIdx >= 0 ? userMsgIdx : 0}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      } else {
+      // Jeśli to NIE jest pobieranie historii, tylko nowa odpowiedź - scrolluj na dół
+      if (loadingStatusText !== "Pobieranie historii czatu...") {
         chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else if (chatHistory.length > 0) {
+      if (isInitialLoadRef.current) {
+        // PIERWSZE ZAŁADOWANIE HISTORII - scrolluj na samą górę tak jak prosił użytkownik
+        if (mainContent) {
+          mainContent.scrollTo({ top: 0, behavior: 'auto' });
+        }
+        isInitialLoadRef.current = false;
+      } else {
+        // Kolejne wiadomości w trakcie rozmowy - scrolluj do nowej odpowiedzi
+        const lastMessage = chatHistory[chatHistory.length - 1];
+        if (lastMessage.role === 'ai') {
+          const userMsgIdx = chatHistory.length - 2;
+          const el = document.getElementById(`msg-${userMsgIdx >= 0 ? userMsgIdx : 0}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        } else {
+          chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
       }
     }
   }, [isLoading, loadingStatusText, chatHistory.length]);
+
+  // Re-fetch messages when chatId changes (but NOT when this component just created it)
+  useEffect(() => {
+    // If navigating back to "new chat"
+    if (!chatId) {
+      setChatHistory([]);
+      currentChatIdRef.current = null;
+      isInitialLoadRef.current = true;
+      return;
+    }
+
+    // Only load messages if the ID changed from the OUTSIDE (e.g. sidebar click)
+    // We compare with currentChatIdRef.current which is updated locally during handleSearch
+    if (chatId !== currentChatIdRef.current) {
+      console.log('BimOS: Navigation detected, loading messages for', chatId);
+      isInitialLoadRef.current = true;
+      currentChatIdRef.current = chatId; // Sync ref
+      loadMessages(chatId);
+    }
+  }, [chatId]);
+
+  const loadMessages = async (id: string) => {
+    setIsLoading(true);
+    setLoadingStatusText("Pobieranie historii czatu...");
+    try {
+      const messages = await fetchChatMessages(id);
+      setChatHistory(messages);
+    } catch (error) {
+      console.error("Failed to load messages:", error);
+    } finally {
+      setIsLoading(false);
+      setLoadingStatusText("");
+    }
+  };
 
   const handleSearch = async (overrideQuery?: string) => {
     const finalQuery = overrideQuery || query;
     if (!finalQuery.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = { role: 'user', content: finalQuery };
-    setChatHistory(prev => [...prev, userMessage]);
+    // --- OPTIMISTIC UI START ---
+    // Clear input and show loading IMMEDIATELY before any async calls
     setQuery('');
     setIsLoading(true);
+    setLoadingStatusText("Inicjowanie...");
+    // --- OPTIMISTIC UI END ---
+
+    let targetChatId = currentChatIdRef.current;
+    
+    // 1. Create chat if it doesn't exist
+    if (!targetChatId) {
+      try {
+        setLoadingStatusText("Pobieranie bazy danych..."); // Shorter status for speed
+        // Use first 30 chars of query as title
+        const title = finalQuery.length > 35 ? finalQuery.substring(0, 32) + "..." : finalQuery;
+        const newChat = await createNewChat(title);
+        targetChatId = newChat.id;
+        currentChatIdRef.current = targetChatId;
+        onChatCreated(targetChatId); // In App.tsx: setActiveChatId(targetChatId)
+      } catch (error) {
+        console.error("Failed to create chat:", error);
+        setIsLoading(false);
+        setLoadingStatusText("");
+        setQuery(finalQuery); // Restore query on failure
+        return;
+      }
+    }
+
+    const userMessage: ChatMessage = { role: 'user', content: finalQuery, chat_id: targetChatId };
+    setChatHistory(prev => [...prev, userMessage]);
     setLoadingStatusText("Pobieranie kontekstu...");
 
     try {
+      // Save user message to DB
+      await saveMessage(targetChatId, 'user', finalQuery);
+
       const response = await askKnowledgeBase([...chatHistory, userMessage], finalQuery, (status) => {
         setLoadingStatusText(status);
       });
-      setChatHistory(prev => [...prev, { role: 'ai', content: response }]);
+
+      // Save AI message to DB
+      await saveMessage(targetChatId, 'ai', response);
+
+      setChatHistory(prev => [...prev, { role: 'ai', content: response, chat_id: targetChatId }]);
     } catch (error) {
       console.error("Search Error:", error);
-      setChatHistory(prev => [...prev, { role: 'ai', content: "Przepraszam, błąd systemu. Spróbuj za chwilę." }]);
+      setChatHistory(prev => [...prev, { role: 'ai', content: "Przepraszam, błąd systemu. Spróbuj za chwilę.", chat_id: targetChatId || undefined }]);
     } finally {
       setIsLoading(false);
       setLoadingStatusText("");
@@ -315,7 +411,14 @@ const SearchHero: React.FC = () => {
                 <Globe size={14} /> <span>Baza Wiedzy: cKOB (v.1.0)</span>
               </div>
               <div className="footer-item">
-                <Clock size={14} /> <span>Aktualizacja: 2024</span>
+                <Clock size={14} />
+                <span>
+                  Aktualizacja:{' '}
+                  {lastUpdateDate
+                    ? new Date(lastUpdateDate).toLocaleDateString('pl-PL', { year: 'numeric', month: 'long', day: 'numeric' })
+                    : '2024'
+                  }
+                </span>
               </div>
             </div>
           </div>

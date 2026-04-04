@@ -1,7 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { fetchEngineers, type Engineer } from '../services/engineerService';
-import { Search, Download, RefreshCw, UserCheck, Activity, X } from 'lucide-react';
+import { 
+  Plus, 
+  Trash2, 
+  CheckCircle, 
+  AlertCircle, 
+  Loader2, 
+  Download, 
+  ToggleLeft, 
+  ToggleRight, 
+  Search, 
+  Clock, 
+  BookOpen, 
+  History, 
+  Activity, 
+  X, 
+  Database, 
+  FileText, 
+  Shield, 
+  Settings, 
+  ChevronRight, 
+  ShieldCheck, 
+  Scale,
+  RefreshCw,
+  UserCheck,
+  Upload
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { fetchKnowledgeBases, uploadKnowledgeBase, getDownloadUrl, toggleKnowledgeBaseActive, deleteKnowledgeBase, type KnowledgeBase } from '../services/knowledgeService';
+import { 
+  uploadLegalDocument, 
+  fetchLegalDocuments, 
+  toggleLegalDocActive, 
+  deleteLegalDocument, 
+  reindexLegalDocument, 
+  LEGAL_CATEGORIES, 
+  type LegalDocument, 
+  type LegalCategory, 
+  type IngestionProgress 
+} from '../services/legalRagService';
 import './AdminPanel.css';
 
 interface EnrichmentLog {
@@ -27,9 +64,25 @@ interface Profile {
 }
 
 const AdminPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics'>('ecrub');
+  const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics' | 'knowledge'>('ecrub');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [isProfilesLoading, setIsProfilesLoading] = useState(false);
+
+  // Knowledge Base State
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const [kbLoading, setKbLoading] = useState(false);
+  const [kbUploadStatus, setKbUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [kbUploadMessage, setKbUploadMessage] = useState('');
+  const [kbForm, setKbForm] = useState({ name: '', version: '1.0', description: '' });
+  const kbFileRef = useRef<HTMLInputElement>(null);
+
+  // Legal Documents (RAG) State
+  const [legalDocs, setLegalDocs] = useState<LegalDocument[]>([]);
+  const [legalDocsLoading, setLegalDocsLoading] = useState(false);
+  const [legalIngestionProgress, setLegalIngestionProgress] = useState<IngestionProgress | null>(null);
+  const [legalForm, setLegalForm] = useState({ name: '', category: 'budowlane' as LegalCategory });
+  const legalFileRef = useRef<HTMLInputElement>(null);
+
   
   const [engineers, setEngineers] = useState<Engineer[]>([]);
   const [filtered, setFiltered] = useState<Engineer[]>([]);
@@ -146,9 +199,151 @@ const AdminPanel: React.FC = () => {
     }
   };
 
+  const loadKnowledgeBases = async () => {
+    setKbLoading(true);
+    try {
+      const data = await fetchKnowledgeBases();
+      setKnowledgeBases(data);
+    } catch (err) {
+      console.error('Failed to load knowledge bases:', err);
+    } finally {
+      setKbLoading(false);
+    }
+  };
+
+  const loadLegalDocs = async () => {
+    setLegalDocsLoading(true);
+    try {
+      const data = await fetchLegalDocuments();
+      setLegalDocs(data);
+    } catch (err) {
+      console.error('Failed to load legal documents:', err);
+    } finally {
+      setLegalDocsLoading(false);
+    }
+  };
+
+  const handleKbUpload = async () => {
+    const file = kbFileRef.current?.files?.[0];
+    if (!file || !kbForm.name.trim()) {
+      setKbUploadStatus('error');
+      setKbUploadMessage('Wybierz plik i podaj nazwę bazy wiedzy.');
+      return;
+    }
+    setKbUploadStatus('uploading');
+    setKbUploadMessage('Przesyłanie pliku do chmury...');
+    try {
+      await uploadKnowledgeBase(file, kbForm.name, kbForm.version, kbForm.description);
+      setKbUploadStatus('success');
+      setKbUploadMessage(`Plik "${file.name}" został pomyślnie wgrany!`);
+      setKbForm({ name: '', version: '1.0', description: '' });
+      if (kbFileRef.current) kbFileRef.current.value = '';
+      loadKnowledgeBases();
+    } catch (err: any) {
+      setKbUploadStatus('error');
+      setKbUploadMessage(`Błąd: ${err.message}`);
+    }
+  };
+
+  const handleKbDownload = async (kb: KnowledgeBase) => {
+    try {
+      const url = await getDownloadUrl(kb.storage_path);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = kb.filename;
+      a.click();
+    } catch (err: any) {
+      alert(`Błąd pobierania: ${err.message}`);
+    }
+  };
+
+  const handleKbToggle = async (kb: KnowledgeBase) => {
+    try {
+      await toggleKnowledgeBaseActive(kb.id, !kb.is_active);
+      loadKnowledgeBases();
+    } catch (err: any) {
+      alert(`Błąd: ${err.message}`);
+    }
+  };
+
+  const handleKbDelete = async (kb: KnowledgeBase) => {
+    if (!window.confirm(`Usunąć bazę wiedzy "${kb.name}"? Operacja jest nieodwracalna.`)) return;
+    try {
+      await deleteKnowledgeBase(kb.id, kb.storage_path);
+      loadKnowledgeBases();
+    } catch (err: any) {
+      alert(`Błąd usuwania: ${err.message}`);
+    }
+  };
+
+  // --- Legal Documents (RAG) Handlers ---
+
+  const handleLegalUpload = async () => {
+    const file = legalFileRef.current?.files?.[0];
+    if (!file || !legalForm.name.trim()) {
+      alert('Wybierz plik PDF i podaj nazwę dokumentu.');
+      return;
+    }
+    if (!file.name.endsWith('.pdf')) {
+      alert('Obsługiwane są wyłącznie pliki PDF.');
+      return;
+    }
+    setLegalIngestionProgress({ stage: 'uploading', message: 'Inicjowanie...' });
+    try {
+      await uploadLegalDocument(
+        file,
+        legalForm.name,
+        legalForm.category,
+        (progress) => setLegalIngestionProgress(progress)
+      );
+      setLegalForm({ name: '', category: 'budowlane' });
+      if (legalFileRef.current) legalFileRef.current.value = '';
+      loadLegalDocs();
+      setTimeout(() => setLegalIngestionProgress(null), 4000);
+    } catch (err: any) {
+      setLegalIngestionProgress({ stage: 'error', message: `Błąd: ${err.message}` });
+    }
+  };
+
+  const handleLegalToggle = async (doc: LegalDocument) => {
+    try {
+      await toggleLegalDocActive(doc.id, !doc.is_active);
+      loadLegalDocs();
+    } catch (err: any) {
+      alert(`Błąd: ${err.message}`);
+    }
+  };
+
+  const handleLegalReindex = async (doc: LegalDocument) => {
+    // Disabled confirm for automated repair
+    // if (!window.confirm(`Czy na pewno chcesz ponownie wygenerować indeks dla "${doc.name}"? Spowoduje to wyczyszczenie istniejących i utworzenie nowych fragmentów.`)) return;
+    
+    setLegalIngestionProgress({ stage: 'downloading', message: 'Inicjowanie naprawy...' });
+    try {
+      await reindexLegalDocument(doc, (progress) => setLegalIngestionProgress(progress as any));
+      loadLegalDocs();
+      setTimeout(() => setLegalIngestionProgress(null), 4000);
+    } catch (err: any) {
+      setLegalIngestionProgress({ stage: 'error', message: `Błąd naprawy: ${err.message}` });
+    }
+  };
+
+  const handleLegalDelete = async (doc: LegalDocument) => {
+    if (!window.confirm(`Usunąć akt prawny "${doc.name}" wraz z ${doc.chunk_count} fragmentami? Operacja jest nieodwracalna.`)) return;
+    try {
+      await deleteLegalDocument(doc.id, doc.storage_path);
+      loadLegalDocs();
+    } catch (err: any) {
+      alert(`Błąd usuwania: ${err.message}`);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'users') {
       fetchProfiles();
+    } else if (activeTab === 'knowledge') {
+      loadKnowledgeBases();
+      loadLegalDocs();
     }
   }, [activeTab]);
 
@@ -270,6 +465,13 @@ const AdminPanel: React.FC = () => {
           style={{ padding: '8px 16px', background: activeTab === 'analytics' ? '#eff6ff' : 'transparent', color: activeTab === 'analytics' ? '#2563eb' : '#666', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
         >
           Analityka SEO / Ruch Webowy
+        </button>
+        <button 
+          onClick={() => setActiveTab('knowledge')}
+          style={{ padding: '8px 16px', background: activeTab === 'knowledge' ? '#eff6ff' : 'transparent', color: activeTab === 'knowledge' ? '#2563eb' : '#666', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          <BookOpen size={15} />
+          Bazy Wiedzy AI
         </button>
       </div>
 
@@ -522,6 +724,372 @@ const AdminPanel: React.FC = () => {
               <h3 style={{ color: '#334155', fontWeight: 500 }}>Aby na żywo renderować interaktywne wykresy GA4</h3>
               <p style={{ maxWidth: 400, margin: '12px auto' }}>Wklej <code>ID Metryki G-XXXXXXX</code> do pliku konfiguracyjnego `index.html` oraz zintegruj <i>@google-analytics/data</i>.</p>
             </div>
+          </main>
+        )}
+
+        {/* WIDOK: KNOWLEDGE BASE */}
+        {activeTab === 'knowledge' && (
+          <main className="admin-main" style={{ padding: '32px', overflowY: 'auto' }}>
+            <h2 style={{ marginBottom: 8, fontSize: '1.5rem', fontWeight: 600 }}>Zarządzanie Bazami Wiedzy AI</h2>
+            <p style={{ color: '#64748b', marginBottom: 32, fontSize: '0.9rem' }}>Wgraj nowe pliki źródłowe (.md, .txt, .pdf), które posłużą jako baza wiedzy dla modelu AI w czacie.</p>
+
+            {/* UPLOAD FORM */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: 28, marginBottom: 36 }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Upload size={18} style={{ color: '#2563eb' }} />
+                Wgraj Nową Bazę Wiedzy
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Nazwa wyświetlana *</label>
+                  <input
+                    type="text"
+                    placeholder="np. cKOB Biblia v2"
+                    value={kbForm.name}
+                    onChange={e => setKbForm(p => ({ ...p, name: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Wersja</label>
+                  <input
+                    type="text"
+                    placeholder="np. 1.0"
+                    value={kbForm.version}
+                    onChange={e => setKbForm(p => ({ ...p, version: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Opis (opcjonalnie)</label>
+                <input
+                  type="text"
+                  placeholder="np. Zaktualizowano o nowe rozporządzenia z 2025"
+                  value={kbForm.description}
+                  onChange={e => setKbForm(p => ({ ...p, description: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Plik źródłowy (.md, .txt, .pdf) *</label>
+                <input
+                  ref={kbFileRef}
+                  type="file"
+                  accept=".md,.txt,.pdf"
+                  style={{ display: 'block', padding: '8px 0', fontSize: '0.9rem', color: '#334155' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <button
+                  onClick={handleKbUpload}
+                  disabled={kbUploadStatus === 'uploading'}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: kbUploadStatus === 'uploading' ? '#94a3b8' : '#2563eb',
+                    color: 'white', border: 'none', borderRadius: 10,
+                    padding: '10px 22px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
+                  }}
+                >
+                  {kbUploadStatus === 'uploading' ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={16} />}
+                  {kbUploadStatus === 'uploading' ? 'Przesyłanie...' : 'Wgraj plik'}
+                </button>
+
+                {kbUploadStatus === 'success' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#059669', fontSize: '0.9rem' }}>
+                    <CheckCircle size={16} /> {kbUploadMessage}
+                  </div>
+                )}
+                {kbUploadStatus === 'error' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ef4444', fontSize: '0.9rem' }}>
+                    <AlertCircle size={16} /> {kbUploadMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* FILES LIST */}
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <BookOpen size={18} style={{ color: '#2563eb' }} />
+              Aktualne Bazy Wiedzy ({knowledgeBases.length})
+            </h3>
+
+            {kbLoading ? (
+              <div style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
+                <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 12px', display: 'block' }} />
+                Ładowanie listy...
+              </div>
+            ) : knowledgeBases.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: 16 }}>
+                <BookOpen size={40} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
+                Brak wgranych baz wiedzy. Użyj formularza powyżej.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {knowledgeBases.map(kb => (
+                  <div key={kb.id} style={{
+                    background: '#fff',
+                    border: `1px solid ${kb.is_active ? '#bfdbfe' : '#e2e8f0'}`,
+                    borderRadius: 14,
+                    padding: '16px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    transition: 'all 0.2s'
+                  }}>
+                    <div style={{
+                      width: 40, height: 40,
+                      background: kb.is_active ? '#eff6ff' : '#f8fafc',
+                      borderRadius: 10,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <BookOpen size={20} style={{ color: kb.is_active ? '#2563eb' : '#94a3b8' }} />
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.95rem', color: '#1e293b' }}>{kb.name}</span>
+                        <span style={{
+                          fontSize: '0.75rem', padding: '2px 8px', borderRadius: 20,
+                          background: kb.is_active ? '#dcfce7' : '#f1f5f9',
+                          color: kb.is_active ? '#16a34a' : '#64748b',
+                          fontWeight: 500
+                        }}>
+                          {kb.is_active ? 'Aktywna' : 'Nieaktywna'}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>v{kb.version}</span>
+                      </div>
+                      <div style={{ fontSize: '0.83rem', color: '#64748b', marginBottom: 2 }}>
+                        📄 {kb.filename}
+                        {kb.description && <span style={{ marginLeft: 10, color: '#94a3b8' }}>— {kb.description}</span>}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                        Aktualizacja: {new Date(kb.updated_at).toLocaleString('pl-PL')}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button
+                        onClick={() => handleKbDownload(kb)}
+                        title="Pobierz"
+                        style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', color: '#334155' }}
+                      >
+                        <Download size={14} /> Pobierz
+                      </button>
+                      <button
+                        onClick={() => handleKbToggle(kb)}
+                        title={kb.is_active ? 'Dezaktywuj' : 'Aktywuj'}
+                        style={{ padding: '7px 10px', borderRadius: 8, border: `1px solid ${kb.is_active ? '#bfdbfe' : '#e2e8f0'}`, background: kb.is_active ? '#eff6ff' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', color: kb.is_active ? '#2563eb' : '#64748b' }}
+                      >
+                        {kb.is_active ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                        {kb.is_active ? 'Aktywna' : 'Aktywuj'}
+                      </button>
+                      <button
+                        onClick={() => handleKbDelete(kb)}
+                        title="Usuń"
+                        style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#ef4444' }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ========== LEGAL DOCUMENTS RAG ========== */}
+            <div style={{ marginTop: 48, borderTop: '1px solid #e2e8f0', paddingTop: 32 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+                <Scale size={20} style={{ color: '#6366f1' }} />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#1e293b' }}>Akty Prawne (Baza RAG)</h3>
+                <span style={{ fontSize: 12, background: '#ede9fe', color: '#6366f1', borderRadius: 20, padding: '2px 10px', fontWeight: 600 }}>
+                  Wyszukiwanie semantyczne pgvector
+                </span>
+              </div>
+
+              <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20, lineHeight: 1.6 }}>
+                Wgraj akty prawne w formacie PDF. System automatycznie wyekstrahuje tekst, podzieli go na fragmenty 
+                według artykułów i wygeneruje embeddingi (Gemini). AI będzie cytować konkretne artykuły w odpowiedziach.
+              </p>
+
+              {/* Upload form */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                <h4 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: '#334155' }}>Dodaj nowy akt prawny</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#64748b', marginBottom: 6 }}>Nazwa aktu prawnego *</label>
+                    <input
+                      type="text"
+                      value={legalForm.name}
+                      onChange={e => setLegalForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="np. Prawo Budowlane 2024"
+                      disabled={!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error'}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#64748b', marginBottom: 6 }}>Kategoria</label>
+                    <select
+                      value={legalForm.category}
+                      onChange={e => setLegalForm(f => ({ ...f, category: e.target.value as LegalCategory }))}
+                      disabled={!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error'}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, background: '#fff', boxSizing: 'border-box' }}
+                    >
+                      {Object.entries(LEGAL_CATEGORIES).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#64748b', marginBottom: 6 }}>Plik PDF *</label>
+                  <input
+                    ref={legalFileRef}
+                    type="file"
+                    accept=".pdf"
+                    disabled={!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error'}
+                    style={{ fontSize: 13 }}
+                  />
+                </div>
+
+                {/* Progress indicator */}
+                {legalIngestionProgress && (
+                  <div style={{
+                    marginBottom: 16,
+                    padding: '12px 16px',
+                    borderRadius: 8,
+                    background: legalIngestionProgress.stage === 'done' ? '#f0fdf4' : legalIngestionProgress.stage === 'error' ? '#fef2f2' : '#eff6ff',
+                    border: `1px solid ${legalIngestionProgress.stage === 'done' ? '#bbf7d0' : legalIngestionProgress.stage === 'error' ? '#fecaca' : '#bfdbfe'}`,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
+                  }}>
+                    {legalIngestionProgress.stage === 'done' && <CheckCircle size={16} style={{ color: '#16a34a', marginTop: 1, flexShrink: 0 }} />}
+                    {legalIngestionProgress.stage === 'error' && <AlertCircle size={16} style={{ color: '#dc2626', marginTop: 1, flexShrink: 0 }} />}
+                    {legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error' && <Loader2 size={16} style={{ color: '#3b82f6', marginTop: 1, flexShrink: 0, animation: 'spin 1s linear infinite' }} />}
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: legalIngestionProgress.stage === 'done' ? '#16a34a' : legalIngestionProgress.stage === 'error' ? '#dc2626' : '#1d4ed8' }}>
+                        {legalIngestionProgress.stage === 'done' ? 'Zakończono!' : legalIngestionProgress.stage === 'error' ? 'Błąd' : 'Przetwarzanie...'}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                        {legalIngestionProgress.message}
+                        {legalIngestionProgress.totalChunks && legalIngestionProgress.stage !== 'done' && (
+                          <span> ({legalIngestionProgress.chunk}/{legalIngestionProgress.totalChunks})</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleLegalUpload}
+                  disabled={!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error'}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+                    borderRadius: 8, border: 'none', background: '#6366f1', color: '#fff',
+                    fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: (!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error') ? 0.5 : 1
+                  }}
+                >
+                  {legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error'
+                    ? <><Loader2 size={16} /> Przetwarzanie (może trwać kilka minut)...</>
+                    : <><FileText size={16} /> Wgraj i indeksuj PDF</>
+                  }
+                </button>
+              </div>
+
+              {/* Legal documents list */}
+              {legalDocsLoading ? (
+                <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>
+                  <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                  <p>Ładowanie aktów prawnych...</p>
+                </div>
+              ) : legalDocs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 32, color: '#94a3b8', background: '#f8fafc', borderRadius: 12, border: '1px dashed #e2e8f0' }}>
+                  <Scale size={32} style={{ marginBottom: 8, opacity: 0.4 }} />
+                  <p style={{ margin: 0 }}>Brak wgranych aktów prawnych. Dodaj pierwszy plik PDF powyżej.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {legalDocs.map(doc => (
+                    <div key={doc.id} style={{
+                      background: '#fff',
+                      border: `1px solid ${doc.is_active ? '#c7d2fe' : '#e2e8f0'}`,
+                      borderRadius: 10,
+                      padding: '14px 18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}>
+                      <FileText size={18} style={{ color: doc.is_active ? '#6366f1' : '#94a3b8', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>{doc.name}</span>
+                          <span style={{
+                            fontSize: 11, padding: '1px 8px', borderRadius: 20, fontWeight: 500,
+                            background: doc.is_active ? '#ede9fe' : '#f1f5f9',
+                            color: doc.is_active ? '#6366f1' : '#94a3b8',
+                          }}>
+                            {doc.is_active ? '● Aktywny' : '○ Nieaktywny'}
+                          </span>
+                          <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 20, background: '#f1f5f9', color: '#64748b', fontWeight: 500 }}>
+                            {LEGAL_CATEGORIES[doc.category as LegalCategory] || doc.category}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                          {doc.chunk_count} fragmentów • {new Date(doc.created_at).toLocaleDateString('pl-PL')} • {doc.filename}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                        <button
+                          onClick={() => handleLegalToggle(doc)}
+                          style={{
+                            padding: '7px 14px', borderRadius: 8, border: `1px solid ${doc.is_active ? '#e2e8f0' : '#c7d2fe'}`,
+                            background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                            fontSize: 12, fontWeight: 500, color: doc.is_active ? '#64748b' : '#6366f1'
+                          }}
+                        >
+                          {doc.is_active ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                          {doc.is_active ? 'Dezaktywuj' : 'Aktywuj'}
+                        </button>
+                        
+                        {(doc.chunk_count === 0 || doc.is_active) && (
+                          <button
+                            onClick={() => handleLegalReindex(doc)}
+                            title="Wygeneruj ponownie fragmenty i wektory"
+                            disabled={!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error'}
+                            style={{ 
+                              padding: '7px 14px', borderRadius: 8, border: '1px solid #bfdbfe', 
+                              background: doc.chunk_count === 0 ? '#fef2f2' : '#fff', cursor: 'pointer', 
+                              display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, 
+                              color: doc.chunk_count === 0 ? '#dc2626' : '#2563eb',
+                              opacity: (!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error') ? 0.5 : 1
+                            }}
+                          >
+                            <RefreshCw size={14} style={{ animation: (!!legalIngestionProgress && legalIngestionProgress.stage !== 'done' && legalIngestionProgress.stage !== 'error') ? 'spin 2s linear infinite' : 'none' }} />
+                            {doc.chunk_count === 0 ? 'Napraw Indeks' : 'Re-indeks'}
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleLegalDelete(doc)}
+                          title="Usuń"
+                          style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#ef4444' }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* ========== END LEGAL DOCUMENTS ========== */}
+
           </main>
         )}
 

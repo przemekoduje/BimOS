@@ -11,14 +11,30 @@ interface AuthModalProps {
 const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string, type: 'error' | 'success' } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const ADMIN_EMAIL = 'przemek.rakotny@gmail.com';
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      showToast(err.message || 'Błąd logowania przez Google.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const handleSsoClick = () => {
-    showToast('Logowanie SSO jest czasowo wyłączone.');
+  const handleAppleLogin = () => {
+    showToast('Logowanie przez Apple jest jeszcze w trakcie konfiguracji.');
   };
 
   const showToast = (text: string, type: 'error' | 'success' = 'error') => {
@@ -26,7 +42,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const handleAuth = async () => {
+  const handleAuth = async (mode: 'magic' | 'password' = 'magic') => {
     if (!email) {
       showToast('Wprowadź e-mail.');
       return;
@@ -35,7 +51,25 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
     setIsLoading(true);
 
     try {
-      if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      if (isSignUp) {
+        if (!password) {
+          showToast('Wprowadź hasło dla nowego konta.');
+          setIsLoading(false);
+          return;
+        }
+        const { error } = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            emailRedirectTo: window.location.origin
+          }
+        });
+        if (error) throw error;
+        showToast('Konto utworzone! Sprawdź e-mail, aby potwierdzić.', 'success');
+        return;
+      }
+
+      if (mode === 'password') {
         if (!showPassword) {
           setShowPassword(true);
           setIsLoading(false);
@@ -47,7 +81,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
         
         onSuccess(email);
       } else {
-        // Regular user - Magic Link
+        // Magic Link
         const { error } = await supabase.auth.signInWithOtp({ 
           email,
           options: {
@@ -83,7 +117,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
           
           {!showPassword && (
             <div className="auth-buttons-group">
-              <button className="auth-btn auth-btn-google" onClick={handleSsoClick}>
+              <button className="auth-btn auth-btn-google" onClick={handleGoogleLogin} disabled={isLoading}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#fff"/>
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff"/>
@@ -92,7 +126,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
                 </svg>
                 Kontynuuj z Google
               </button>
-              <button className="auth-btn auth-btn-apple" onClick={handleSsoClick}>
+              <button className="auth-btn auth-btn-apple" onClick={handleAppleLogin} disabled={isLoading}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M15.4 12.3c0-1.8 1.4-2.8 1.5-2.8-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.7-3.2.7-.7 0-1.7-.7-2.8-.7-1.3 0-2.6.8-3.4 2-1.3 2.1-3 6.1-1.3 9 1 1.6 2 3.1 3.5 3.1 1.5 0 2-1 3.8-1 1.7 0 2.2.9 3.8.9 1.6 0 2.6-1.4 3.5-2.8.9-1.5 1.1-2.9 1.1-3-.1 0-2.5-.9-2.5-3.8z" fill="#1a1a1a"/>
                   <path d="M14.6 6.1c.8-1 1.3-2.4 1.2-3.8-1.2.1-2.7.8-3.5 1.8-.7.8-1.2 2.2-1.1 3.6 1.4.1 2.7-.6 3.4-1.6z" fill="#1a1a1a"/>
@@ -113,35 +147,88 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
               onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
               disabled={showPassword}
             />
-            {showPassword && (
-              <input 
-                type="password" 
-                className="auth-input" 
-                placeholder="Wprowadź hasło admina" 
-                value={password}
-                autoFocus
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
-                style={{ marginTop: 8 }}
-              />
-            )}
-            <button 
-              className={`auth-btn auth-btn-email ${email ? 'active' : ''}`}
-              onClick={handleAuth}
-              style={{ marginTop: 8 }}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                  <div className="mini-loader"></div> <span>Przetwarzanie...</span>
+            <div className="auth-login-options">
+              {isSignUp ? (
+                <div className="auth-signup-group">
+                  <input 
+                    type="password" 
+                    className="auth-input" 
+                    placeholder="Wybierz hasło (min. 6 znaków)" 
+                    value={password}
+                    autoFocus
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAuth('password')}
+                    style={{ marginTop: 8 }}
+                  />
+                  <button 
+                    className={`auth-btn auth-btn-email ${email && password.length >= 6 ? 'active' : ''}`}
+                    onClick={() => handleAuth('password')}
+                    style={{ marginTop: 8 }}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? <div className="mini-loader"></div> : 'Utwórz konto'}
+                  </button>
                 </div>
               ) : (
-                showPassword ? 'Zaloguj jako Admin' : 'Kontynuuj z e-mailem'
+                !showPassword ? (
+                  <div className="auth-dual-buttons">
+                    <button 
+                      className={`auth-btn auth-btn-email ${email ? 'active' : ''}`}
+                      onClick={() => handleAuth('magic')}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? <div className="mini-loader"></div> : 'Wyślij Link'}
+                    </button>
+                    <button 
+                      className={`auth-btn auth-btn-password-toggle ${email ? 'active' : ''}`}
+                      onClick={() => setShowPassword(true)}
+                      disabled={isLoading}
+                    >
+                      Zaloguj hasłem
+                    </button>
+                  </div>
+                ) : (
+                  <div className="auth-password-group">
+                    <input 
+                      type="password" 
+                      className="auth-input" 
+                      placeholder="Wprowadź swoje hasło" 
+                      value={password}
+                      autoFocus
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAuth('password')}
+                      style={{ marginTop: 8 }}
+                    />
+                    <button 
+                      className="auth-btn auth-btn-email active"
+                      onClick={() => handleAuth('password')}
+                      style={{ marginTop: 8 }}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? <div className="mini-loader"></div> : 'Zaloguj'}
+                    </button>
+                    <button 
+                      className="auth-back-to-magic"
+                      onClick={() => { setShowPassword(false); setPassword(''); }}
+                      style={{ marginTop: 12, background: 'none', border: 'none', color: '#666', fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      Powrót do logowania linkiem
+                    </button>
+                  </div>
+                )
               )}
-            </button>
+            </div>
           </div>
           
-          <a href="#" className="auth-sso-link" onClick={(e) => { e.preventDefault(); handleSsoClick(); }}>Jednolity dostęp (SSO)</a>
+          <div className="auth-mode-toggle">
+            {isSignUp ? (
+              <span>Masz już konto? <button onClick={() => setIsSignUp(false)}>Zaloguj się</button></span>
+            ) : (
+              <span>Nie masz konta? <button onClick={() => setIsSignUp(true)}>Zarejestruj się</button></span>
+            )}
+          </div>
+          
+          <a href="#" className="auth-sso-link" onClick={(e) => { e.preventDefault(); handleGoogleLogin(); }}>Jednolity dostęp (SSO)</a>
           
           {toastMessage && (
             <div className={`auth-toast ${toastMessage.type}`} style={{

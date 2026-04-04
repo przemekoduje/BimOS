@@ -1,7 +1,4 @@
-/**
- * AI Service for Gemini integration - BimOS "Iron Logic" Edition (v4)
- * @author Senior Dev / Antigravity
- */
+import { supabase } from '../lib/supabase';
 
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
@@ -13,7 +10,9 @@ const CACHE_KEY = "bimos_ckob_cache_v4";
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import cKOBBible from '../knowledge_base/cKOB_biblia.md?raw';
+import cKOBBibleFallback from '../knowledge_base/cKOB_biblia.md?raw';
+import { fetchActiveKBContent } from './knowledgeService';
+import { searchLegalChunks } from './legalRagService';
 
 // pdfjs worker setup
 if (typeof window !== 'undefined') {
@@ -21,8 +20,19 @@ if (typeof window !== 'undefined') {
 }
 
 export interface ChatMessage {
+  id?: string;
+  chat_id?: string;
   role: 'user' | 'ai';
   content: string;
+  created_at?: string;
+}
+
+export interface ChatSession {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  is_pinned?: boolean;
 }
 
 export interface VerificationResult {
@@ -69,9 +79,10 @@ export interface PreInspectionContext {
 // --- PROMPTS ---
 
 // @BIMOS-STABLE-CHAT-V5-PROMPT-START (Kluczowy Prompt dla Dymków i Truncation Fix)
-export const KNOWLEDGE_BASE_PROMPT = `
+// Instrukcje systemowe bez treści bazy wiedzy (dynamicznie podmieniane)
+const PROMPT_TEMPLATE = `
 [ROLE]
-Jesteś elitarnym inżynierskim asystentem AI "BimOS" specjalizującym się WYŁĄCZNIE w Prawie Budowlanym, cyfrowej Książce Obiektu Budowlanego (c-KOB) oraz nadzorze inżynierskim.
+Jesteś elitarnym inżynierskim asystentem AI "BimOS", ekspertem ds. Prawa Budowlanego, Warunków Technicznych oraz Nadzoru Inżynierskiego. Twoja wiedza obejmuje pełen zakres przepisów techniczno-budowlanych, procedur administracyjnych (w tym procedury naprawczej) oraz cyfrowej Książki Obiektu Budowlanego (c-KOB).
 
 [ŻELAZNE ZASADY FORMATOWANIA - KRYTYCZNIE WAŻNE]
 1. ZAKAZ używania składni Markdown dla dymków/tooltipów (żadnych '[tekst](# "treść")').
@@ -79,12 +90,12 @@ Jesteś elitarnym inżynierskim asystentem AI "BimOS" specjalizującym się WYŁ
 3. HIERARCHIA TAGOWANIA (PRIORYTET):
    - Artykuły i ustępy (np. Art. 93, ust. 1, pkt 8) MAJĄ ABSOLUTNY PRIORYTET. 
    - ZAKAZ tagowania samej nazwy ustawy "Prawo Budowlane" lub "PB", jeśli w zdaniu występuje konkretny numer artykułu. Taguj TYLKO numer artykułu.
-   - W dymku dla artykułu podawaj jego TREŚĆ z Biblii Wiedzy, a nie definicję dokumentu.
+   - W dymku dla artykułu podawaj jego TREŚĆ z Biblii Wiedzy lub dostarczonego kontekstu, a nie definicję dokumentu.
    - PRZYKŁAD: "...kara grzywny na podstawie [[Art. 93::Art. 93 pkt 8 PB: Kto nie dokonuje wpisu w terminie 7 dni, podlega karze grzywny.]] Prawa Budowlanego..."
 4. ZAKAZ używania znaku '#' wewnątrz tekstu odpowiedzi (zarezerwowany tylko dla nagłówków ## i ###).
 5. ZAKAZ używania pogrubień (bold) wewnątrz akapitów.
 6. TWOJA ZAAWANSOWANA DYSCYPLINA:
-   - Odpowiadaj TYLKO na tematy techniczne, inżynierskie, budowlane i związane ze sprawnością c-KOB!
+   - Odpowiadaj profesjonalnie na WSZYSTKIE tematy techniczne, inżynierskie i prawne z zakresu budownictwa.
    - BĄDŹ ZWIĘZŁY: Odpowiadaj krótko i syntetycznie.
    - NIGDY NIE URYWAJ WYPOWIEDZI W POŁOWIE. Jeśli zaczynasz dymek [[...]], MUSISZ go zamknąć.
 7. NA KONIEC podaj zawsze 3 dopytania (z użyciem specjalnego znacznika [DOPYTANIA_START]).
@@ -96,9 +107,40 @@ Jesteś elitarnym inżynierskim asystentem AI "BimOS" specjalizującym się WYŁ
 - Pytanie 2?
 - Pytanie 3?
 
+[KONTEKST PRAWNY RAG]
+Jeśli w wiadomości użytkownika znajduje się blok [KONTEKST PRAWNY], potraktuj go jako NAJWAŻNIEJSZE źródło wiedzy aktualnej. Są to fragmenty z wgranych przez użytkownika aktów prawnych (PDF).
+Gdy powołujesz się na te fragmenty, ZAWSZE używaj formatu [[Art. X::Cytat z dokumentu]], gdzie w dymku (po ::) podajesz treść z dokumentu RAG, a nie z ogólnej Biblii.
+
 [BIBLIA WIEDZY cKOB]
-${cKOBBible}
+{KB_CONTENT}
 `;
+
+/**
+ * Buduje pełny prompt systemowy z podaną treścią bazy wiedzy.
+ * Treść pochodzi z Supabase Storage (zarządzana w Adminie) lub z lokalnego fallbacku.
+ */
+function buildKnowledgeBasePrompt(kbContent: string): string {
+  return PROMPT_TEMPLATE.replace('{KB_CONTENT}', kbContent);
+}
+
+/**
+ * Pobiera aktywną treść bazy wiedzy:
+ * 1. Próbuje Supabase Storage (plik wgrany przez admina)
+ * 2. Fallback: lokalny plik cKOB_biblia.md (wbudowany w kod)
+ */
+async function getKBContent(onStatus?: (s: string) => void): Promise<string> {
+  onStatus?.("Ładowanie bazy wiedzy...");
+  const cloudContent = await fetchActiveKBContent();
+  if (cloudContent) {
+    console.log('[BimOS KB] Using cloud KB from Supabase Storage.');
+    return cloudContent;
+  }
+  console.log('[BimOS KB] No cloud KB found, using local fallback cKOB_biblia.md');
+  return cKOBBibleFallback;
+}
+
+// Eksportowane dla kompatybilności wstecznej (używane jako fallback w callGemini)
+export let KNOWLEDGE_BASE_PROMPT = buildKnowledgeBasePrompt(cKOBBibleFallback);
 // @BIMOS-STABLE-CHAT-V5-PROMPT-END
 
 export const PRE_INSPECTION_PROMPT = `
@@ -149,13 +191,40 @@ Live Radar Scaning. Zwróć JSON z "detected": true/false.
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+// Simple hash function to detect content changes
+function getContentHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(36);
+}
+
+const CACHE_TTL_SECONDS = 172800; // 48 hours for maximum cost reduction
+
 async function ensureCache(onStatus?: (s: string) => void): Promise<string> {
+  // 1. Fetch KB content (Supabase Storage → local fallback)
+  const kbContent = await getKBContent(onStatus);
+  const currentPromptContent = buildKnowledgeBasePrompt(kbContent);
+  
+  // Update exported prompt so callGemini fallback is also current
+  KNOWLEDGE_BASE_PROMPT = currentPromptContent;
+
+  const currentHash = getContentHash(currentPromptContent);
   const stored = localStorage.getItem(CACHE_KEY);
+
   if (stored) {
-    const { name, expires } = JSON.parse(stored);
-    if (Date.now() < expires) {
+    const { name, expires, hash } = JSON.parse(stored);
+    
+    // Use cache ONLY if hash matches AND it hasn't expired
+    if (hash === currentHash && Date.now() < expires) {
       onStatus?.("Pobieranie danych z bazy wiedzy...");
+      console.log("Using existing Gemini cache:", name, "Hash:", hash);
       return name;
+    } else {
+      console.log("Cache invalid: mismatch or expired. Regenerating...");
     }
   }
 
@@ -166,9 +235,9 @@ async function ensureCache(onStatus?: (s: string) => void): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: CACHE_MODEL,
-        displayName: "cKOB Biblia v4",
-        ttl: "3600s",
-        contents: [{ role: "user", parts: [{ text: KNOWLEDGE_BASE_PROMPT }] }]
+        displayName: "cKOB Biblia Prod v5",
+        ttl: `${CACHE_TTL_SECONDS}s`,
+        contents: [{ role: "user", parts: [{ text: currentPromptContent }] }]
       })
     });
     const data = await response.json();
@@ -176,11 +245,14 @@ async function ensureCache(onStatus?: (s: string) => void): Promise<string> {
 
     localStorage.setItem(CACHE_KEY, JSON.stringify({
       name: data.name,
-      expires: Date.now() + 3600 * 1000
+      hash: currentHash,
+      expires: Date.now() + CACHE_TTL_SECONDS * 1000
     }));
+    
+    console.log("New Gemini cache created:", data.name, "Hash:", currentHash);
     return data.name;
   } catch (error) {
-    console.error("Cache failed:", error);
+    console.error("Cache creation failed:", error);
     return "";
   }
 }
@@ -190,7 +262,8 @@ async function callGemini(
   messages: ChatMessage[], 
   cacheName: string,
   onStatus?: (s: string) => void,
-  expectJson: boolean = false
+  expectJson: boolean = false,
+  systemInstruction?: string
 ): Promise<any> {
   const url = `${API_BASE_URL}/${DEFAULT_MODEL}:generateContent?key=${API_KEY}`;
   onStatus?.("Generowanie precyzyjnej instrukcji...");
@@ -207,7 +280,15 @@ async function callGemini(
     }
   };
 
-  if (cacheName) body.cachedContent = cacheName;
+  if (systemInstruction) {
+    body.system_instruction = {
+      parts: [{ text: systemInstruction }]
+    };
+  }
+
+  if (cacheName) {
+    body.cachedContent = cacheName;
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -227,23 +308,121 @@ export async function askKnowledgeBase(
   query: string,
   onStatus?: (s: string) => void
 ): Promise<string> {
-  const cacheName = await ensureCache(onStatus);
+  // Run cache validation AND RAG search in parallel for speed
+  const [cacheName, ragChunks] = await Promise.all([
+    ensureCache(onStatus),
+    searchLegalChunks(query, 12).catch(() => []), // Increased topK to 12 for better context coverage
+  ]);
   
-  // Wzbogacenie o kontekst Live (Daily Briefing)
+  // Build enriched query: Daily Briefing + RAG legal context + user question
   let enrichedQuery = query;
+
+  // 1. Prepend RAG legal context if found
+  if (ragChunks.length > 0) {
+    const ragContext = ragChunks
+      .map(chunk => `[DOKUMENT: ${chunk.document_name} | REFERENCJA: ${chunk.article_ref}]
+TREŚĆ: ${chunk.content}`)
+      .join('\n---\n');
+    
+    enrichedQuery = `[AKTUALNE PRZEPISY PRAWA - TWOJE GŁÓWNE ŹRÓDŁO WIEDZY]
+Użyj poniższych fragmentów jako podstawy odpowiedzi. To są najnowsze akty prawne wgrane przez użytkownika.
+---
+${ragContext}
+---
+
+[PYTANIE UŻYTKOWNIKA]
+${query}`;
+    
+    onStatus?.(`Znaleziono ${ragChunks.length} trafnych fragmentów w aktach prawnych...`);
+    console.log(`[RAG] Injected ${ragChunks.length} legal chunks for query: "${query.substring(0, 60)}...".`);
+  }
+
+  // 2. Prepend daily briefing (Live context)
   try {
     const res = await fetch('/daily_update.json');
     if (res.ok) {
       const liveData = await res.json();
       if (liveData.chatBriefing) {
-        enrichedQuery = `[Kontekst Prawny Live z dzisiaj: ${liveData.chatBriefing}] \n\nPytanie użytkownika: ${query}`;
+        enrichedQuery = `[Kontekst Prawny Live z dzisiaj: ${liveData.chatBriefing}]\n\n${enrichedQuery}`;
       }
     }
   } catch (e) {
-    console.error("Nie udało się pobrać daily briefingu do chatu", e);
+    // daily briefing is optional
   }
 
-  return await callGemini([...history, { role: 'user', content: enrichedQuery }], cacheName, onStatus);
+  // FALLBACK: Jeśli nie mamy cache, przekazujemy prompt bezpośrednio jako systemInstruction
+  return await callGemini(
+    [...history, { role: 'user', content: enrichedQuery }], 
+    cacheName, 
+    onStatus, 
+    false, 
+    cacheName ? undefined : KNOWLEDGE_BASE_PROMPT
+  );
+}
+
+// --- DATABASE PERSISTENCE ---
+
+export async function fetchUserChats(): Promise<ChatSession[]> {
+  const { data, error } = await supabase
+    .from('chats')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchChatMessages(chatId: string): Promise<ChatMessage[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('chat_id', chatId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createNewChat(title: string): Promise<ChatSession> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No user logged in");
+
+  const { data, error } = await supabase
+    .from('chats')
+    .insert([{ user_id: user.id, title }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function saveMessage(chatId: string, role: 'user' | 'ai', content: string): Promise<ChatMessage> {
+  const { data, error } = await supabase
+    .from('messages')
+    .insert([{ chat_id: chatId, role, content }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+export async function deleteChat(chatId: string): Promise<void> {
+  const { error } = await supabase
+    .from('chats')
+    .delete()
+    .eq('id', chatId);
+
+  if (error) throw error;
+}
+
+export async function updateChat(chatId: string, updates: Partial<ChatSession>): Promise<void> {
+  const { error } = await supabase
+    .from('chats')
+    .update(updates)
+    .eq('id', chatId);
+
+  if (error) throw error;
 }
 
 // --- SPECIFIC VERIFIERS ---
