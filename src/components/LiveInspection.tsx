@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { inspectionStore } from '../services/inspectionStore';
-import { analyzeLiveVideoFrame, askAdHocQuestion } from '../services/aiService';
+import { analyzeLiveVideoFrame, askAdHocQuestion, subscribeToAiCalls } from '../services/aiService';
 import type { LiveFeedItem } from '../services/inspectionStore';
 import './LiveInspection.css';
 
@@ -16,6 +16,8 @@ export default function LiveInspection({ onBack, onFinish }: LiveInspectionProps
   const [isRecording, setIsRecording] = useState(false);
   const [arBox, setArBox] = useState<any>(null); // Bounding box state from continuous scan
   const [liveFeed, setLiveFeed] = useState<LiveFeedItem[]>([]);
+  const [aiUsageCount, setAiUsageCount] = useState(0);
+  const [autoStopTimer, setAutoStopTimer] = useState<number>(600); // 10 minutes countdown (seconds)
   
   // Modale
   const [showAdhoc, setShowAdhoc] = useState(false);
@@ -107,6 +109,30 @@ export default function LiveInspection({ onBack, onFinish }: LiveInspectionProps
     return () => clearInterval(intervalId);
   }, [isRecording]);
 
+  // Update call count and handle auto-stop countdown
+  useEffect(() => {
+    return subscribeToAiCalls(setAiUsageCount);
+  }, []);
+
+  useEffect(() => {
+    let timer: any;
+    if (isRecording) {
+      timer = setInterval(() => {
+        setAutoStopTimer(prev => {
+          if (prev <= 1) {
+            setIsRecording(false);
+            alert("⚠️ Automatyczne zatrzymanie radaru AR (limit 10 minut przekroczony dla bezpieczeństwa kosztów).");
+            return 600;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setAutoStopTimer(600); // Reset timer when stopped
+    }
+    return () => clearInterval(timer);
+  }, [isRecording]);
+
   // Sync feed items with store
   useEffect(() => {
     setLiveFeed(inspectionStore.getLiveFeedItems());
@@ -186,6 +212,11 @@ export default function LiveInspection({ onBack, onFinish }: LiveInspectionProps
 
   return (
     <div className="live-inspection-container">
+      {/* AI Usage HUD (Top Center) */}
+      <div className="ai-usage-hud">
+        🤖 ZAPYTANIA AI (SESJA): {aiUsageCount}
+      </div>
+
       {/* Viewfinder (Video) */}
       <div className="camera-viewfinder">
         <video 
@@ -222,12 +253,11 @@ export default function LiveInspection({ onBack, onFinish }: LiveInspectionProps
           
           {isRecording ? (
             <div className="recording-indicator">
-              <div className="red-dot"></div> Nagrywanie AR Aktywne
+              <div className="red-dot"></div> Nagrywanie AR Aktywne ({Math.floor(autoStopTimer / 60)}:{(autoStopTimer % 60).toString().padStart(2, '0')})
             </div>
           ) : (
              <div className="recording-indicator" style={{opacity: 0.5}}>Standby</div>
           )}
-
           {/* Safety Gate Warning Panel */}
           <div className="safety-gate-card">
             <h4>Checklista Stref (Z historii):</h4>

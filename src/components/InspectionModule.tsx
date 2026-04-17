@@ -87,6 +87,11 @@ export default function InspectionModule() {
               setVoiceStep(1);
             }}
           >Asystent Głosowy (Hands-Free)</button>
+          <button 
+            className="tab-btn demo-btn"
+            onClick={() => setActiveTab('camera')}
+            style={{ background: 'rgba(255, 255, 255, 0.05)', color: '#0a84ff', border: '1px solid rgba(10, 132, 255, 0.3)' }}
+          >Szybki start (Tryb AR)</button>
         </div>
       </div>
 

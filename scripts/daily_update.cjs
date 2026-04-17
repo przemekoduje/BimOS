@@ -1,7 +1,11 @@
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
+const { isAiDisabled } = require('./check_ai_status.cjs');
+
+// GLOBAL KILL-SWITCH CHECK
+if (isAiDisabled()) {
+  process.exit(0);
+}
 const yahooFinance = require('yahoo-finance2').default;
 
 const OUTPUT_JSON = path.join(__dirname, '../public/daily_update.json');

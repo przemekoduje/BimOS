@@ -14,7 +14,186 @@ import cKOBBibleFallback from '../knowledge_base/cKOB_biblia.md?raw';
 import { fetchActiveKBContent } from './knowledgeService';
 import { searchLegalChunks } from './legalRagService';
 
-// pdfjs worker setup
+// AI Monitoring & Cost Tracking
+export type AIProcessType = 'chat' | 'rag' | 'ar_radar' | 'vision_analysis' | 'voice_processing' | 'background_scripts';
+
+export interface AIProcessStats {
+  calls: number;
+  model: string;
+  estimatedCost: number; // in USD
+  status: 'IDLE' | 'ACTIVE' | 'ERROR' | 'DISABLED';
+  lastActive?: string;
+}
+
+export interface AIMonitoringStats {
+  processes: Record<AIProcessType, AIProcessStats>;
+  totalCost: number;
+  isAiDisabled: boolean;
+}
+
+const MONITORING_STORAGE_KEY = "bimos_ai_monitoring_v1";
+
+const initialStats: AIMonitoringStats = {
+  processes: {
+    chat: { calls: 0, model: 'Gemini 2.5 Flash', estimatedCost: 0, status: 'IDLE' },
+    rag: { calls: 0, model: 'Text-Embedding-004', estimatedCost: 0, status: 'IDLE' },
+    ar_radar: { calls: 0, model: 'Gemini 2.5 Flash', estimatedCost: 0, status: 'IDLE' },
+    vision_analysis: { calls: 0, model: 'Gemini 2.5 Flash', estimatedCost: 0, status: 'IDLE' },
+    voice_processing: { calls: 0, model: 'Gemini 2.5 Flash', estimatedCost: 0, status: 'IDLE' },
+    background_scripts: { calls: 0, model: 'Mixed (Flash/Pro)', estimatedCost: 0, status: 'IDLE' }
+  },
+  totalCost: 0,
+  isAiDisabled: false
+};
+
+const loadMonitoringStats = (): AIMonitoringStats => {
+  if (typeof window === 'undefined') return initialStats;
+  const stored = localStorage.getItem(MONITORING_STORAGE_KEY);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      // Reset statuses to IDLE on load to prevent stagnant "ACTIVE" labels
+      Object.keys(parsed.processes).forEach(k => {
+        parsed.processes[k].status = parsed.isAiDisabled ? 'DISABLED' : 'IDLE';
+      });
+      return parsed;
+    } catch (e) {
+      return initialStats;
+    }
+  }
+  return initialStats;
+};
+
+// Global function to sync with server-side kill-switch
+async function syncWithServerStatus() {
+  try {
+    const res = await fetch('/api/ai/status');
+    if (res.ok) {
+      const { isDisabled } = await res.json();
+      if (isDisabled !== monitoringStats.isAiDisabled) {
+        console.log(`[AI SYNC] Server reports isDisabled=${isDisabled}. Syncing...`);
+        monitoringStats.isAiDisabled = isDisabled;
+        Object.keys(monitoringStats.processes).forEach(key => {
+          monitoringStats.processes[key as AIProcessType].status = isDisabled ? 'DISABLED' : 'IDLE';
+        });
+        saveMonitoringStats();
+        notifyMonitoringObservers();
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to sync AI status with server", e);
+  }
+}
+
+// Start periodic sync
+if (typeof window !== 'undefined') {
+  syncWithServerStatus();
+  setInterval(syncWithServerStatus, 30000); // Sync every 30s
+}
+
+let monitoringStats: AIMonitoringStats = loadMonitoringStats();
+
+const saveMonitoringStats = () => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(MONITORING_STORAGE_KEY, JSON.stringify(monitoringStats));
+  }
+};
+
+const monitoringObservers: ((stats: AIMonitoringStats) => void)[] = [];
+
+export const getAiMonitoringStats = () => monitoringStats;
+
+export const resetAiMonitoringStats = () => {
+  const disabledState = monitoringStats.isAiDisabled;
+  monitoringStats = { ...initialStats, isAiDisabled: disabledState };
+  saveMonitoringStats();
+  notifyMonitoringObservers();
+};
+
+export const subscribeToAiMonitoring = (callback: (stats: AIMonitoringStats) => void) => {
+  monitoringObservers.push(callback);
+  callback(monitoringStats);
+  return () => {
+    const index = monitoringObservers.indexOf(callback);
+    if (index > -1) monitoringObservers.splice(index, 1);
+  };
+};
+
+export function incrementAiUsage(process: AIProcessType, modelUsed: string = 'Gemini 2.5 Flash') {
+  if (monitoringStats.isAiDisabled) return;
+
+  const costPerCall = modelUsed.toLowerCase().includes('embedding') ? 0.00005 : 0.0003; // Corrected estimates for 2.5 Flash
+  
+  monitoringStats.processes[process].calls++;
+  monitoringStats.processes[process].model = modelUsed;
+  monitoringStats.processes[process].estimatedCost += costPerCall;
+  monitoringStats.processes[process].status = 'ACTIVE';
+  monitoringStats.processes[process].lastActive = new Date().toISOString();
+  
+  monitoringStats.totalCost += costPerCall;
+  
+  saveMonitoringStats();
+  notifyMonitoringObservers();
+  
+  // Set back to IDLE after a short delay for UI visual feedback
+  setTimeout(() => {
+    if (monitoringStats.processes[process].status === 'ACTIVE') {
+      monitoringStats.processes[process].status = 'IDLE';
+      saveMonitoringStats();
+      notifyMonitoringObservers();
+    }
+  }, 2000);
+}
+
+export async function stopAllAiActiveProcesses() {
+  monitoringStats.isAiDisabled = true;
+  Object.keys(monitoringStats.processes).forEach(key => {
+    monitoringStats.processes[key as AIProcessType].status = 'DISABLED';
+  });
+  
+  saveMonitoringStats();
+  notifyMonitoringObservers();
+  
+  // Kill background enrichment script if running via our proxy
+  try {
+    await fetch('/api/enrichment/stop', { method: 'POST' });
+  } catch (e) {
+    console.warn("Failed to stop enrichment script via API", e);
+  }
+
+  console.log("!!! AI KILL-SWITCH ACTIVATED !!! All processes stopped (Persisted).");
+}
+
+export async function enableAiActiveProcesses() {
+  monitoringStats.isAiDisabled = false;
+  Object.keys(monitoringStats.processes).forEach(key => {
+    monitoringStats.processes[key as AIProcessType].status = 'IDLE';
+  });
+  saveMonitoringStats();
+  notifyMonitoringObservers();
+
+  try {
+    await fetch('/api/ai/enable', { method: 'POST' });
+  } catch (e) {
+    console.warn("Failed to enable AI on server", e);
+  }
+
+  console.log("AI processes re-enabled (Persisted Globally).");
+}
+
+function notifyMonitoringObservers() {
+  monitoringObservers.forEach(cb => cb({ ...monitoringStats }));
+}
+
+
+// Keep legacy support for simple counter
+export const subscribeToAiCalls = (callback: (count: number) => void) => {
+  return subscribeToAiMonitoring((stats) => {
+    const totalCalls = Object.values(stats.processes).reduce((sum, p) => sum + p.calls, 0);
+    callback(totalCalls);
+  });
+};
+
 if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 }
@@ -189,8 +368,6 @@ Live Radar Scaning. Zwróć JSON z "detected": true/false.
 
 // --- CORE LOGIC ---
 
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
-
 // Simple hash function to detect content changes
 function getContentHash(str: string): string {
   let hash = 0;
@@ -202,9 +379,15 @@ function getContentHash(str: string): string {
   return hash.toString(36);
 }
 
-const CACHE_TTL_SECONDS = 172800; // 48 hours for maximum cost reduction
+const CACHE_TTL_SECONDS = 3600; // Reduced to 1 hour to prevent persistent storage costs
 
 async function ensureCache(onStatus?: (s: string) => void): Promise<string> {
+  // 0. CHECK KILL-SWITCH (CRITICAL)
+  if (monitoringStats.isAiDisabled) {
+    console.log("[AI CACHE] AI is disabled. Skipping cache creation.");
+    return "";
+  }
+
   // 1. Fetch KB content (Supabase Storage → local fallback)
   const kbContent = await getKBContent(onStatus);
   const currentPromptContent = buildKnowledgeBasePrompt(kbContent);
@@ -251,8 +434,8 @@ async function ensureCache(onStatus?: (s: string) => void): Promise<string> {
     
     console.log("New Gemini cache created:", data.name, "Hash:", currentHash);
     return data.name;
-  } catch (error) {
-    console.error("Cache creation failed:", error);
+  } catch (error: any) {
+    console.error("Gemini Cache creation failed:", error.message || error);
     return "";
   }
 }
@@ -265,6 +448,10 @@ async function callGemini(
   expectJson: boolean = false,
   systemInstruction?: string
 ): Promise<any> {
+  if (monitoringStats.isAiDisabled) {
+    throw new Error("AI (BimOS Intelligence) jest obecnie wyłączone (Kill-switch).");
+  }
+
   const url = `${API_BASE_URL}/${DEFAULT_MODEL}:generateContent?key=${API_KEY}`;
   onStatus?.("Generowanie precyzyjnej instrukcji...");
 
@@ -297,9 +484,36 @@ async function callGemini(
   });
 
   const data = await response.json();
-  if (data.error) throw new Error(data.error.message);
   
-  const text = data.candidates[0].content.parts[0].text;
+  if (data.error) {
+    const errorMsg = data.error.message || "Unknown Gemini API error";
+    console.error("[AI ERROR] Gemini API returned error:", errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  if (!data.candidates || data.candidates.length === 0) {
+    console.error("[AI ERROR] No candidates returned. Full response:", JSON.stringify(data));
+    throw new Error("Przepraszam, ale nie mogę odpowiedzieć na to pytanie ze względu na filtry bezpieczeństwa lub błąd generowania.");
+  }
+
+  const candidate = data.candidates[0];
+  if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+    if (candidate.finishReason === 'SAFETY') {
+      throw new Error("Odpowiedź została zablokowana przez filtry bezpieczeństwa treści.");
+    }
+    throw new Error("Otrzymano pustą odpowiedź z serwera AI.");
+  }
+  
+  // Track this call in monitoring
+  let processType: AIProcessType = 'chat';
+  if (systemInstruction?.includes('AUTO_FRAME')) processType = 'ar_radar';
+  else if (systemInstruction?.includes('CONSTRUCTION_VERIFICATION')) processType = 'vision_analysis';
+  else if (systemInstruction?.includes('VOICE_LOG')) processType = 'voice_processing';
+
+  incrementAiUsage(processType, DEFAULT_MODEL);
+  console.log(`[AI] Call to ${processType} completed via ${DEFAULT_MODEL}`);
+  
+  const text = candidate.content.parts[0].text;
   return expectJson ? JSON.parse(text) : text;
 }
 
@@ -310,7 +524,10 @@ export async function askKnowledgeBase(
 ): Promise<string> {
   // Run cache validation AND RAG search in parallel for speed
   const [cacheName, ragChunks] = await Promise.all([
-    ensureCache(onStatus),
+    ensureCache(onStatus).catch(err => {
+      console.warn("Gemini context caching failed, falling back to non-cached call:", err.message);
+      return ""; // Fallback: return empty cache name
+    }),
     searchLegalChunks(query, 12).catch(() => []), // Increased topK to 12 for better context coverage
   ]);
   
@@ -451,7 +668,7 @@ export async function analyzeLiveVideoFrame(imageB64: string): Promise<any> {
   return await callGemini([{ role: 'user', content: AUTO_FRAME_PROMPT + "\nIMAGE_DATA: " + imageB64 }], "", undefined, true);
 }
 
-export async function processVoiceLog(audioB64: string, textOverride?: string): Promise<VerificationResult> {
+export async function processVoiceLog(_audioB64: string, textOverride?: string): Promise<VerificationResult> {
   const prompt = textOverride ? `TEKST: ${textOverride}\n${VOICE_LOG_STRUCTURE_PROMPT}` : VOICE_LOG_STRUCTURE_PROMPT;
   const result = await callGemini([{ role: 'user', content: prompt }], "", undefined, true);
   return {
@@ -467,15 +684,6 @@ export async function processVoiceLog(audioB64: string, textOverride?: string): 
 }
 
 // --- PDF HELPERS ---
-
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 async function extractPDFFullText(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Layers, Search, Compass, Settings, LogIn, PanelLeftClose, PanelLeftOpen, Share2, Trash2, Pin, MoreVertical, Copy, Mail, MessageCircle, X, ExternalLink, Folder as FolderIcon, FolderPlus, ChevronRight, ChevronDown } from 'lucide-react'
+import { subscribeToAiCalls } from './services/aiService'
+import { Layers, Search, Compass, Settings, LogIn, PanelLeftClose, PanelLeftOpen, Share2, Trash2, Pin, MoreVertical, Copy, Mail, MessageCircle, X, ExternalLink, Folder as FolderIcon, FolderPlus, ChevronRight, ChevronDown, ClipboardCheck } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { fetchUserChats, type ChatSession } from './services/aiService'
 import SearchHero from './components/SearchHero'
@@ -8,6 +9,7 @@ import UserPanel from './components/UserPanel'
 import DiscoverDashboard from './components/DiscoverDashboard'
 import NewsDetail from './components/NewsDetail'
 import AuthModal from './components/AuthModal'
+import InspectionModule from './components/InspectionModule'
 import './index.css'
 
 interface Folder {
@@ -72,7 +74,7 @@ const ShareModal = ({ chat, onClose }: { chat: ChatSession, onClose: () => void 
 };
 
 function App() {
-  const [view, setView] = useState<'search' | 'admin' | 'discover'>('search');
+  const [view, setView] = useState<'search' | 'admin' | 'discover' | 'inspection'>('search');
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
@@ -92,6 +94,8 @@ function App() {
       return new Set();
     }
   });
+
+  const [aiUsageCount, setAiUsageCount] = useState(0);
 
   const [folders, setFolders] = useState<Folder[]>(() => {
     const stored = localStorage.getItem('bimos_folders');
@@ -166,6 +170,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('bimos_chat_order', JSON.stringify(chatOrder));
   }, [chatOrder]);
+
+  useEffect(() => {
+    return subscribeToAiCalls(setAiUsageCount);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = () => setOpenMenuId(null);
@@ -570,12 +578,22 @@ function App() {
               <Compass size={22} strokeWidth={1.5} className="sidebar-icon" />
               <span className="sidebar-text">Odkrywaj</span>
             </button>
+            <button 
+              className={`sidebar-link ${view === 'inspection' ? 'active' : ''}`}
+              onClick={() => { setView('inspection'); setSelectedNewsId(null); setActiveChatId(null); }}
+            >
+              <ClipboardCheck size={22} strokeWidth={1.5} className="sidebar-icon" />
+              <span className="sidebar-text">Inspekcje (Live)</span>
+            </button>
           </nav>
 
           {isLoggedIn && isSidebarExpanded && (
             <div className="sidebar-history fade-in">
               <div className="sidebar-history-header">
                 <div className="sidebar-history-title">Ostatnie rozmowy</div>
+                <div className="ai-usage-badge" title="Suma zapytań AI w tej sesji">
+                  AI: {aiUsageCount}
+                </div>
                 <button className="add-folder-btn" onClick={handleCreateFolder} title="Nowy folder">
                   <FolderPlus size={16} />
                 </button>
@@ -717,6 +735,7 @@ function App() {
                 <DiscoverDashboard onCardClick={handleNewsClick} />
               )
             )}
+            {view === 'inspection' && <InspectionModule />}
           </>
         )}
       </main>
@@ -725,6 +744,18 @@ function App() {
       {shareModalChat && <ShareModal chat={shareModalChat} onClose={() => setShareModalChat(null)} />}
 
       <style>{`
+        .ai-usage-badge {
+          background: rgba(10, 132, 255, 0.1);
+          color: #0a84ff;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 0.7rem;
+          font-weight: 600;
+          border: 1px solid rgba(10, 132, 255, 0.2);
+          margin-left: auto;
+          margin-right: 8px;
+        }
+
         .app {
           display: flex;
           height: 100vh;

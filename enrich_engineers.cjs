@@ -1,5 +1,10 @@
 const fs = require('fs');
 const axios = require('axios');
+const { isAiDisabled } = require('./scripts/check_ai_status.cjs');
+
+if (isAiDisabled()) {
+  process.exit(0);
+}
 
 // Ścieżka do bazy inżynierów
 const DATA_FILE = 'engineers_data.json';

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const axios = require('axios');
+const { isAiDisabled } = require('./scripts/check_ai_status.cjs');
 
 // Konfiguracja plików
 const DATA_FILE = 'engineers_data.json';

@@ -10,21 +10,20 @@ import {
   ToggleLeft, 
   ToggleRight, 
   Search, 
-  Clock, 
   BookOpen, 
   History, 
   Activity, 
   X, 
   Database, 
   FileText, 
-  Shield, 
-  Settings, 
   ChevronRight, 
-  ShieldCheck, 
   Scale,
   RefreshCw,
   UserCheck,
-  Upload
+  Upload,
+  DollarSign,
+  Cpu,
+  Zap
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { fetchKnowledgeBases, uploadKnowledgeBase, getDownloadUrl, toggleKnowledgeBaseActive, deleteKnowledgeBase, type KnowledgeBase } from '../services/knowledgeService';
@@ -39,15 +38,14 @@ import {
   type LegalCategory, 
   type IngestionProgress 
 } from '../services/legalRagService';
+import { 
+  subscribeToAiMonitoring, 
+  stopAllAiActiveProcesses, 
+  enableAiActiveProcesses,
+  resetAiMonitoringStats,
+  type AIMonitoringStats 
+} from '../services/aiService';
 import './AdminPanel.css';
-
-interface EnrichmentLog {
-  timestamp: string;
-  name: string;
-  license: string;
-  email?: string;
-  phone?: string;
-}
 
 interface EnrichmentStatus {
   status: 'running' | 'stopped' | 'error';
@@ -64,7 +62,7 @@ interface Profile {
 }
 
 const AdminPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics' | 'knowledge'>('ecrub');
+  const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics' | 'knowledge' | 'ai_monitor'>('ecrub');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [isProfilesLoading, setIsProfilesLoading] = useState(false);
 
@@ -99,19 +97,20 @@ const AdminPanel: React.FC = () => {
 
   // New state for enrichment monitor modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [enrichmentLogs, setEnrichmentLogs] = useState<EnrichmentLog[]>([]);
   const [pendingEnrichments, setPendingEnrichments] = useState<any[]>([]);
   const [scriptStatus, setScriptStatus] = useState<EnrichmentStatus | null>(null);
+  const [aiStats, setAiStats] = useState<AIMonitoringStats | null>(null);
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/enrichment_logs.json');
+      const res = await fetch('/api/enrichment/status');
       if (res.ok) {
         const data = await res.json();
-        setEnrichmentLogs(data);
+        setScriptStatus(data);
+        setPendingEnrichments(data.pending || []);
       }
-    } catch (err) {
-      console.warn('Wystąpił błąd przy pobieraniu logów, plik może nie istnieć:', err);
+    } catch (e) {
+      console.warn("Failed to fetch enrichment status", e);
     }
   };
 
@@ -220,6 +219,35 @@ const AdminPanel: React.FC = () => {
       console.error('Failed to load legal documents:', err);
     } finally {
       setLegalDocsLoading(false);
+    }
+  };
+
+  const handleToggleLegalDoc = async (id: string, active: boolean) => {
+    try {
+      await toggleLegalDocActive(id, active);
+      loadLegalDocs();
+    } catch (err) {
+      console.error('Toggle failed', err);
+    }
+  };
+
+  const handleReindexLegalDoc = async (doc: LegalDocument) => {
+    try {
+      await reindexLegalDocument(doc);
+      loadLegalDocs();
+      alert(`Dokument ${doc.name} został przeindeksowany.`);
+    } catch (err) {
+      console.error('Reindex failed', err);
+    }
+  };
+
+  const handleDeleteLegalDoc = async (id: string, path: string) => {
+    if (!window.confirm('Czy na pewno chcesz usunąć ten dokument z bazy RAG?')) return;
+    try {
+      await deleteLegalDocument(id, path);
+      loadLegalDocs();
+    } catch (err) {
+      console.error('Delete failed', err);
     }
   };
 
@@ -371,9 +399,15 @@ const AdminPanel: React.FC = () => {
       }
     }, 5000);
 
+    // Subscribe to AI Monitoring stats
+    const unsubscribeAi = subscribeToAiMonitoring((stats) => {
+      setAiStats(stats);
+    });
+
     return () => {
       clearInterval(intervalLogs);
       clearInterval(intervalStatus);
+      unsubscribeAi();
     };
   }, []);
 
@@ -472,6 +506,13 @@ const AdminPanel: React.FC = () => {
         >
           <BookOpen size={15} />
           Bazy Wiedzy AI
+        </button>
+        <button 
+          onClick={() => setActiveTab('ai_monitor')}
+          style={{ padding: '8px 16px', background: activeTab === 'ai_monitor' ? '#fff5f5' : 'transparent', color: activeTab === 'ai_monitor' ? '#ef4444' : '#666', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          <Activity size={15} />
+          Monitoring AI
         </button>
       </div>
 
@@ -1090,6 +1131,204 @@ const AdminPanel: React.FC = () => {
             </div>
             {/* ========== END LEGAL DOCUMENTS ========== */}
 
+            {/* ========== LEGAL DOCUMENTS LIST ========== */}
+            <div style={{ marginTop: 24, flex: 1 }}>
+              {legalDocs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8', background: '#f8fafc', borderRadius: 12, border: '2px dashed #e2e8f0' }}>
+                  Brak wgranych aktów prawnych w bazie RAG.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                  {legalDocs.map(doc => (
+                    <div key={doc.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <FileText size={16} style={{ color: '#64748b' }} />
+                          <strong style={{ fontSize: 13, color: '#1e293b' }}>{doc.name}</strong>
+                        </div>
+                        <span style={{ fontSize: 10, background: '#f1f5f9', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{doc.category.toUpperCase()}</span>
+                      </div>
+                      
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        Fragmenty: <strong>{doc.chunk_count}</strong> | Wgrano: {new Date(doc.created_at).toLocaleDateString()}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
+                        <button 
+                          onClick={() => handleToggleLegalDoc(doc.id, !doc.is_active)}
+                          className={doc.is_active ? "status-btn active" : "status-btn"}
+                          style={{ flex: 1, fontSize: 11, padding: '6px' }}
+                        >
+                          {doc.is_active ? "Aktywny" : "Nieaktywny"}
+                        </button>
+                        <button 
+                          onClick={() => handleReindexLegalDoc(doc)}
+                          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer' }}
+                          title="Przeindeksuj (RAG)"
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteLegalDoc(doc.id, doc.storage_path)}
+                          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer', color: '#ef4444' }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </main>
+        )}
+
+        {/* WIDOK: MONITORING AI */}
+        {activeTab === 'ai_monitor' && aiStats && (
+          <main className="admin-main" style={{ padding: '32px', overflowY: 'auto' }}>
+            <div className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+              <div>
+                <h1 className="hero-title" style={{ fontSize: '1.5rem', marginBottom: 4 }}>Panel Monitoringu AI</h1>
+                <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Nadzór nad kosztami, sesjami i bezpieczeństwem BimOS Intelligence. (Globalny Kill-Switch)</p>
+              </div>
+              <div className="header-actions" style={{ display: 'flex', gap: 12 }}>
+                <button 
+                  className="refresh-btn" 
+                  onClick={() => {
+                    if (confirm('Czy na pewno chcesz zresetować wszystkie statystyki kosztów? Operacja jest nieodwracalna.')) {
+                      resetAiMonitoringStats();
+                    }
+                  }}
+                  title="Resetuj statystyki"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer' }}
+                >
+                  <RefreshCw size={18} /> Resetuj Statystyki
+                </button>
+              </div>
+            </div>
+
+            {/* AI Blocking Banner */}
+            {aiStats.isAiDisabled && (
+              <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg animate-pulse" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <Activity size={32} style={{ color: '#ef4444' }} />
+                <div>
+                  <h3 className="font-bold" style={{ color: '#ef4444', margin: 0 }}>GLOBALNY AI KILL-SWITCH AKTYWNY</h3>
+                  <p className="text-sm" style={{ color: '#f87171', margin: 0 }}>Wszystkie procesy AI (Czat, Harvestery, Enrichment) zostały całkowicie zablokowane na poziomie serwera.</p>
+                </div>
+              </div>
+            )}
+
+            <div className="admin-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 32 }}>
+              <div className="stat-card premium" style={{ background: '#f8fafc', padding: 20, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#3b82f6', marginBottom: 8 }}><DollarSign size={20} /></div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>Koszt Sesji (Est.)</div>
+                <div style={{ color: '#0f172a', fontSize: '1.5rem', fontWeight: 700 }}>${aiStats.totalCost.toFixed(4)}</div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem' }}>~{(aiStats.totalCost * 4.0).toFixed(2)} PLN</div>
+              </div>
+              
+              <div className="stat-card premium" style={{ background: '#f8fafc', padding: 20, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#3b82f6', marginBottom: 8 }}><Cpu size={20} /></div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>Aktywne Silniki</div>
+                <div style={{ color: '#0f172a', fontSize: '1.2rem', fontWeight: 700 }}>Gemini 2.5 Flash</div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem' }}>Model VSA Advanced</div>
+              </div>
+              
+              <div className="stat-card premium" style={{ background: '#f8fafc', padding: 20, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#3b82f6', marginBottom: 8 }}><Database size={20} /></div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>Suma Zapytań</div>
+                <div style={{ color: '#0f172a', fontSize: '1.5rem', fontWeight: 700 }}>{Object.values(aiStats.processes).reduce((a, b) => a + b.calls, 0)}</div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem' }}>Wszystkie moduły</div>
+              </div>
+              
+              <div className="stat-card premium" style={{ background: '#f8fafc', padding: 20, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#3b82f6', marginBottom: 8 }}><History size={20} /></div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>Ostatnie Zapytanie</div>
+                <div style={{ color: '#0f172a', fontSize: '1.2rem', fontWeight: 700 }}>
+                  {Object.values(aiStats.processes)
+                    .filter(p => p.lastActive)
+                    .sort((a, b) => new Date(b.lastActive!).getTime() - new Date(a.lastActive!).getTime())[0]?.lastActive 
+                      ? new Date(Object.values(aiStats.processes).filter(p => p.lastActive).sort((a, b) => new Date(b.lastActive!).getTime() - new Date(a.lastActive!).getTime())[0].lastActive!).toLocaleTimeString() 
+                      : 'Brak'}
+                </div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem' }}>Status: {aiStats.isAiDisabled ? 'OFF' : 'ONLINE'}</div>
+              </div>
+            </div>
+
+            <div className="table-wrapper premium-table" style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+              <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <th style={{ padding: '16px', textAlign: 'left', fontSize: '0.75rem', color: '#64748b' }}>Moduł / Proces</th>
+                    <th style={{ padding: '16px', textAlign: 'left', fontSize: '0.75rem', color: '#64748b' }}>Model AI</th>
+                    <th style={{ padding: '16px', textAlign: 'left', fontSize: '0.75rem', color: '#64748b' }}>Wywołania</th>
+                    <th style={{ padding: '16px', textAlign: 'left', fontSize: '0.75rem', color: '#64748b' }}>Koszt (USD)</th>
+                    <th style={{ padding: '16px', textAlign: 'left', fontSize: '0.75rem', color: '#64748b' }}>Status Systemu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(aiStats.processes).map(([key, stats]) => (
+                    <tr key={key} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '16px', fontWeight: 600, textTransform: 'capitalize' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <ChevronRight size={14} style={{ color: '#3b82f6' }} />
+                          {key.replace('_', ' ')}
+                        </div>
+                      </td>
+                      <td style={{ padding: '16px' }}><code style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: 4, fontSize: '0.75rem' }}>{stats.model}</code></td>
+                      <td style={{ padding: '16px', fontWeight: 600 }}>{stats.calls}</td>
+                      <td style={{ padding: '16px', color: '#64748b' }}>${stats.estimatedCost.toFixed(5)}</td>
+                      <td style={{ padding: '16px' }}>
+                        <span style={{ 
+                          padding: '4px 10px', 
+                          borderRadius: 20, 
+                          fontSize: '0.7rem', 
+                          fontWeight: 700,
+                          background: stats.status === 'ACTIVE' ? '#dcfce7' : stats.status === 'DISABLED' ? '#fee2e2' : '#f1f5f9',
+                          color: stats.status === 'ACTIVE' ? '#166534' : stats.status === 'DISABLED' ? '#991b1b' : '#64748b'
+                        }}>
+                          {stats.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div className="flex flex-col sm:flex-row gap-4" style={{ display: 'flex', gap: 16 }}>
+                {!aiStats.isAiDisabled ? (
+                  <button
+                    onClick={async () => {
+                      if (confirm('UWAGA: To natychmiast ZABIJE wszystkie aktywne procesy AI i zablokuje zapytania Gemini. Czy kontynuować?')) {
+                        await stopAllAiActiveProcesses();
+                      }
+                    }}
+                    style={{ flex: 1, padding: '16px', background: '#ef4444', color: 'white', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifySelf: 'center', gap: 8 }}
+                  >
+                    <Activity size={20} /> Emergency Kill-Switch (GLOBALNY)
+                  </button>
+                ) : (
+                  <button
+                    onClick={enableAiActiveProcesses}
+                    style={{ flex: 1, padding: '16px', background: '#10b981', color: 'white', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifySelf: 'center', gap: 8 }}
+                  >
+                    <Zap size={20} /> Przywróć działanie AI (Sygnał START)
+                  </button>
+                )}
+              </div>
+
+              <div style={{ padding: 20, background: '#f0f9ff', borderRadius: 12, border: '1px solid #bae6fd' }}>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#0369a1', display: 'flex', gap: 8 }}>
+                  <Plus size={16} /> 
+                  <span>
+                    <strong>System Globalnej Blokady:</strong> Aktywacja Kill-Switcha tworzy fizyczny plik <code>.AI_DISABLED</code> na serwerze. 
+                    Każdy harvester newsów, skrypt wzbogacania inżynierów oraz sesja czatu sprawdza ten plik przed wywołaniem API. 
+                    Gwarantuje to 100% ochrony przed nieplanowanymi kosztami.
+                  </span>
+                </p>
+              </div>
+            </div>
           </main>
         )}
 

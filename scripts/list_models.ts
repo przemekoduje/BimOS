@@ -14,9 +14,7 @@ async function listModels() {
     if (res.ok) {
       console.log('--- MODELS ---');
       data.models.forEach((m: any) => {
-        if (m.supportedGenerationMethods.includes('embedContent')) {
-          console.log(`- ${m.name} (${m.description})`);
-        }
+        console.log(`- ${m.name} (${m.description}) [${m.supportedGenerationMethods.join(',')}]`);
       });
     } else {
       console.log('FAILURE:', JSON.stringify(data));

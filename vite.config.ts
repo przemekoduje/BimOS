@@ -10,7 +10,26 @@ let enrichmentProcess = null;
 const enrichmentControllerPlugin = () => ({
   name: 'enrichment-controller',
   configureServer(server) {
+    const aiDisabledFile = '.AI_DISABLED';
+
     server.middlewares.use((req, res, next) => {
+      // GET /api/ai/status
+      if (req.url === '/api/ai/status' && req.method === 'GET') {
+        const isDisabled = fs.existsSync(aiDisabledFile);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ isDisabled }));
+        return;
+      }
+
+      // POST /api/ai/enable
+      if (req.url === '/api/ai/enable' && req.method === 'POST') {
+        if (fs.existsSync(aiDisabledFile)) {
+          fs.unlinkSync(aiDisabledFile);
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ status: 'ai_enabled_globally' }));
+        return;
+      }
       // POST /api/enrichment/start
       if (req.url === '/api/enrichment/start' && req.method === 'POST') {
         if (enrichmentProcess) {
@@ -20,6 +39,11 @@ const enrichmentControllerPlugin = () => ({
         }
 
         try {
+          // Usuwamy globalną blokadę AI przy starcie
+          if (fs.existsSync(aiDisabledFile)) {
+            fs.unlinkSync(aiDisabledFile);
+          }
+
           // Odpal proces z katalogu w którym się znajdujemy
           enrichmentProcess = spawn('node', ['enrich_engineers.cjs'], {
             detached: false,
@@ -55,12 +79,21 @@ const enrichmentControllerPlugin = () => ({
         }
 
         try {
-          // Wysyłamy SIGINT by pozwolić skryptowi elegancko się ubić 
-          // (mamy intercept SIGINT w samym cjs który updatuje enrichment_status.json na 'stopped')
-          enrichmentProcess.kill('SIGINT');
+          // Globalny Kill-Switch: tworzymy plik blokady dla wszystkich skryptów
+          fs.writeFileSync(aiDisabledFile, 'true');
+
+          if (enrichmentProcess) {
+            // Wysyłamy SIGINT by pozwolić skryptowi elegancko się ubić 
+            enrichmentProcess.kill('SIGINT');
+            enrichmentProcess = null;
+          }
+
+          // KRYTYCZNE: Wywołujemy skrypt czyszczący cache Gemini, by zatrzymać opłaty za storage
+          console.log("[STORAGE] Attempting to purge Gemini caches...");
+          spawn('node', ['./scripts/cleanup_gemini_caches.cjs'], { stdio: 'inherit' });
           
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ status: 'stop_signal_sent' }));
+          res.end(JSON.stringify({ status: 'ai_killed_globally' }));
         } catch(error) {
            res.statusCode = 500;
            res.end(JSON.stringify({ error: error.message }));

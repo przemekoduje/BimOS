@@ -293,9 +293,10 @@ const SearchHero: React.FC<SearchHeroProps> = ({ chatId, onChatCreated }) => {
       await saveMessage(targetChatId, 'ai', response);
 
       setChatHistory(prev => [...prev, { role: 'ai', content: response, chat_id: targetChatId }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Search Error:", error);
-      setChatHistory(prev => [...prev, { role: 'ai', content: "Przepraszam, błąd systemu. Spróbuj za chwilę.", chat_id: targetChatId || undefined }]);
+      const errorMsg = error.message || "Przepraszam, błąd systemu. Spróbuj za chwilę.";
+      setChatHistory(prev => [...prev, { role: 'ai', content: `[BŁĄD] ${errorMsg}`, chat_id: targetChatId || undefined }]);
     } finally {
       setIsLoading(false);
       setLoadingStatusText("");

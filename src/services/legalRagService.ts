@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { incrementAiUsage, getAiMonitoringStats } from './aiService';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -65,6 +66,11 @@ export const LEGAL_CATEGORIES: Record<LegalCategory, string> = {
  * Generates a 768-dimensional embedding vector using Gemini text-embedding-004.
  */
 export async function embedText(text: string): Promise<number[]> {
+  const stats = getAiMonitoringStats();
+  if (stats.isAiDisabled) {
+    throw new Error("Generowanie wektorów (RAG) jest obecnie wyłączone (Kill-switch).");
+  }
+
   try {
     const response = await fetch(EMBEDDING_URL, {
       method: 'POST',
@@ -83,6 +89,10 @@ export async function embedText(text: string): Promise<number[]> {
     }
 
     const data = await response.json();
+    
+    // Track usage
+    incrementAiUsage('rag', 'Text-Embedding-004');
+    
     if (!data.embedding?.values) {
       throw new Error(`Invalid embedding format: ${JSON.stringify(data)}`);
     }
@@ -325,8 +335,16 @@ export async function uploadLegalDocument(
 export async function processLegalDocumentContent(
   docRecord: LegalDocument,
   fileData: ArrayBuffer | Uint8Array,
-  onProgress?: (progress: IngestionProgress) => void
+  onProgress?: (progress: IngestionProgress) => void,
+  force: boolean = false
 ): Promise<LegalDocument> {
+  // Check if already indexed to prevent accidental costs
+  if (!force && docRecord.chunk_count > 0) {
+    console.log(`[INGEST] Document ${docRecord.name} already has ${docRecord.chunk_count} chunks. Skipping re-index.`);
+    onProgress?.({ stage: 'done', message: 'Dokument jest już zaindeksowany. Użyj wymuszenia (force), aby nadpisać.' });
+    return docRecord;
+  }
+
   // 1. Text extraction
   onProgress?.({ stage: 'extracting', message: 'Ekstrakcja tekstu z PDF...' });
   
@@ -459,7 +477,7 @@ export async function reindexLegalDocument(
   }
 
   const buffer = await data.arrayBuffer();
-  return processLegalDocumentContent(doc, buffer, onProgress as any);
+  return processLegalDocumentContent(doc, buffer, onProgress as any, true); // reindex intentionally forces it
 }
 
 // ---------- SEARCH ----------

@@ -1,5 +1,10 @@
 const fs = require('fs');
 const axios = require('axios');
+const { isAiDisabled } = require('./scripts/check_ai_status.cjs');
+
+if (isAiDisabled()) {
+  process.exit(0);
+}
 
 // Configuration
 const OUTPUT_FILE = 'public/automated_news.json';
