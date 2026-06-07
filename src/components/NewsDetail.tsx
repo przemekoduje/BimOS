@@ -1,22 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronLeft, Share2, Bookmark, MessageSquare, Loader2 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { ChevronLeft, Share2, Bookmark, MessageSquare, Loader2, Globe, Plus, Mic, Send, Database } from 'lucide-react';
 import './NewsDetail.css';
-
-interface Source {
-  id: string;
-  title: string;
-  domain: string;
-  url: string;
-}
+import { HeaderNews } from './HeaderNews';
+import { HeaderLegal } from './HeaderLegal';
+import { InteractiveText } from './InteractiveText';
 
 interface NewsItem {
   id: string;
   title: string;
   category: string;
-  shortNote?: string;
+  imageUrl: string;
+  summary: string;
+  timestamp: string;
+  ui_template?: 'legal' | 'news' | 'minimal';
+  style_config?: any;
+  metadata?: any;
   content?: string;
-  isNew?: boolean;
-  date?: string;
+  sourceUrl?: string;
 }
 
 interface NewsDetailProps {
@@ -24,114 +24,129 @@ interface NewsDetailProps {
   onBack: () => void;
 }
 
-const MOCK_SOURCES: Source[] = [
-  { id: 's1', title: 'Ustawa o zmianie ustawy Prawo budowlane', domain: 'isap.sejm.gov.pl', url: '#' },
-  { id: 's2', title: 'Komunikat GUNB w sprawie cyfryzacji', domain: 'gunb.gov.pl', url: '#' },
-  { id: 's3', title: 'Analiza skutków regulacji - RCL', domain: 'rcl.gov.pl', url: '#' }
-];
+import { MOCK_ARTICLES } from './DiscoverDashboard';
 
 const NewsDetail: React.FC<NewsDetailProps> = ({ id, onBack }) => {
   const [item, setItem] = useState<NewsItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [fullContextLoading, setFullContextLoading] = useState(false);
+  const [fullContextLoaded, setFullContextLoaded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const fetchDetail = async () => {
-      try {
-        const response = await fetch('/automated_news.json');
-        const data: NewsItem[] = await response.json();
-        const found = data.find(n => n.id === id);
-        
-        // Symulacja ładowania "pełnego wpisu blogowego"
-        setTimeout(() => {
-          setItem(found || null);
-          setLoading(false);
-        }, 800);
-      } catch (error) {
-        console.error("Błąd ładowania szczegółów:", error);
-        setLoading(false);
+    try {
+      // Mock Data z panelu Odkrywaj
+      let found: any = MOCK_ARTICLES.find(n => n.id === id);
+      
+      if (found) {
+         if (!found.ui_template) {
+           found.ui_template = found.category === 'Prawo' || found.category === 'Legislacja' ? 'legal' : 'news';
+         }
+         if (!found.metadata) {
+           found.metadata = { validity: 'Obowiązujący' };
+         }
+         // Adapt API keys
+         found.imageUrl = found.image_url;
       }
-    };
-
-    fetchDetail();
+      
+      setTimeout(() => {
+        setItem(found || null);
+        setLoading(false);
+      }, 400);
+    } catch (error) {
+      console.error("Error loading news details:", error);
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [query]);
+
+  // Symulacja Just-In-Time Context Retrieval (Pgvector fetch via Supabase)
+  const handleLoadFullContext = () => {
+    setFullContextLoading(true);
+    setTimeout(() => {
+      setItem(prev => prev ? { 
+        ...prev, 
+        content: `Pełna treść dokumentu została pobrana z wektorowej bazy danych. Ta treść była początkowo ukryta (Token Pruned), a została pobrana w mechanizmie Just-in-Time Context Retrieval. Oto przykładowa definicja: [[Just-In-Time::Metodologia ładowania danych na żądanie w celu oszczędności tokenów kontekstowych w modelach typu LLM.]] Została wstrzyknięta by udowodnić działanie parsowania.`
+      } : prev);
+      setFullContextLoading(false);
+      setFullContextLoaded(true);
+    }, 1200);
+  };
+
+  const getVibeThemeColors = (category: string) => {
+    switch(category?.toLowerCase()) {
+      case 'prawo':
+      case 'legislacja':
+        return { '--theme-accent': '#1e3a8a', '--theme-accent-light': '#dbeafe' } as React.CSSProperties; // Navy Blue
+      case 'technologia':
+        return { '--theme-accent': '#059669', '--theme-accent-light': '#d1fae5' } as React.CSSProperties; // Emerald
+      case 'rynek':
+      case 'rss':
+      default:
+        return { '--theme-accent': '#d97706', '--theme-accent-light': '#fef3c7' } as React.CSSProperties; // Amber
+    }
+  };
 
   if (loading) {
     return (
       <div className="news-detail-loading">
         <Loader2 size={32} className="loading-spinner" />
-        <p>Generuję pełną analizę przepisu...</p>
       </div>
     );
   }
 
-  if (!item) {
-    return (
-      <div className="news-detail-error">
-        <h2>Nie znaleziono wpisu</h2>
-        <button onClick={onBack}>Wróć do listy</button>
-      </div>
-    );
-  }
+  if (!item) return null;
 
   return (
-    <div className="news-detail-page">
-      <nav className="news-detail-nav">
-        <button className="back-btn" onClick={onBack}>
-          <ChevronLeft size={20} />
-          <span>Powrót</span>
+    <div className={`perplexity-view ${item.ui_template || 'news'}`} style={getVibeThemeColors(item.category)}>
+      <header className="px-detail-nav">
+        <button className="px-back-btn" onClick={onBack}>
+          <ChevronLeft size={18} />
+          <span>Powrót do Odkrywaj</span>
         </button>
-        <div className="nav-actions">
-          <button className="icon-btn"><Share2 size={18} /></button>
-          <button className="icon-btn"><Bookmark size={18} /></button>
-        </div>
-      </nav>
+      </header>
 
-      <div className="news-detail-content">
-        <header className="detail-header">
-          <div className="category-tag">{item.category}</div>
-          <h1 className="detail-title">{item.title}</h1>
-          <div className="detail-meta">Opublikowano {item.date || 'dzisiaj'} • Przez BimOS AI • Moduł Legislacyjny</div>
-        </header>
-
-        <section className="sources-section">
-          <h4 className="section-label">Źródła analizy</h4>
-          <div className="sources-grid">
-            {MOCK_SOURCES.map(source => (
-              <a key={source.id} href={source.url} className="source-card" target="_blank" rel="noopener noreferrer">
-                <div className="source-info">
-                  <span className="source-domain">{source.domain}</span>
-                  <span className="source-title">{source.title}</span>
-                </div>
-                <div className="source-index">{source.id.replace('s', '')}</div>
-              </a>
-            ))}
-          </div>
-        </section>
-
-        <article className="detail-body">
-          <p className="lead-text">
-            {item.shortNote}
+      <main className="px-detail-container">
+        
+        {/* POLIMORFICZNY HEADER */}
+        {item.ui_template === 'legal' ? (
+          <HeaderLegal 
+            title={item.title} 
+            category={item.category} 
+            imageUrl={item.imageUrl} 
+            metadata={item.metadata} 
+          />
+        ) : (
+          <HeaderNews 
+            title={item.title} 
+            category={item.category} 
+            timestamp={item.timestamp || '4 godziny temu'} 
+            sourceUrl={item.sourceUrl} 
+          />
+        )}
+        
+        {/* EXECUTIVE SUMMARY (Warstwa AI) */}
+        <div className="px-executive-summary">
+          <div className="summary-label">Podsumowanie AI</div>
+          <p className="px-article-lead">
+            <InteractiveText content={item.summary} />
           </p>
-          
-          <div className="divider"></div>
+        </div>
 
-          <div dangerouslySetInnerHTML={{ __html: item.content?.replace(/\n/g, '<br/>') || '' }} />
+        {/* PEŁNY TEKST / KONTEKST ARTYKUŁU */}
+        <div className="full-context-content">
+           <InteractiveText content={item.content || 'Tu znajduje się pełna treść pobrana z oryginalnego kanału RSS, dokumentu prawnego lub z bazy wektorowej db, gdy system działa z prawdziwym backendem. Obecnie widzisz dane demonstracyjne (Mock). Poniżej użyliśmy przykładowego tagu definiującego: [[BIM::Building Information Modeling - technologia bazująca na obiektach 3D i parametrach]] aby pokazać jak AI w locie tłumaczy pojęcia.'} />
+        </div>
 
-          <blockquote>
-            "Automatyczna analiza legislacyjna BimOS pozwala na natychmiastowe wdrożenie zmian projektowych bez konieczności ręcznego śledzenia Dziennika Ustaw." 
-            <cite>— System AI BimOS</cite>
-          </blockquote>
-        </article>
-
-        <section className="related-section">
-          <h4 className="section-label">Powiązane zapytania do AI</h4>
-          <div className="related-pills">
-            <button className="pill-btn"><MessageSquare size={14} /> Czy ta zmiana wpływa na moje obecne projekty?</button>
-            <button className="pill-btn"><MessageSquare size={14} /> Wygeneruj listę kontrolną dla nowej normy</button>
-            <button className="pill-btn"><MessageSquare size={14} /> Porównaj z poprzednią wersją ustawy</button>
-          </div>
-        </section>
-      </div>
+        <div className="px-bottom-spacer"></div>
+      </main>
     </div>
   );
 };

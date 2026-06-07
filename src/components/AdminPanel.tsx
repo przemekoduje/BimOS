@@ -62,7 +62,7 @@ interface Profile {
 }
 
 const AdminPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics' | 'knowledge' | 'ai_monitor'>('ecrub');
+  const [activeTab, setActiveTab] = useState<'ecrub' | 'users' | 'analytics' | 'knowledge' | 'ai_monitor' | 'rss'>('ecrub');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [isProfilesLoading, setIsProfilesLoading] = useState(false);
 
@@ -100,6 +100,12 @@ const AdminPanel: React.FC = () => {
   const [pendingEnrichments, setPendingEnrichments] = useState<any[]>([]);
   const [scriptStatus, setScriptStatus] = useState<EnrichmentStatus | null>(null);
   const [aiStats, setAiStats] = useState<AIMonitoringStats | null>(null);
+
+  // RSS State
+  const [rssChannels, setRssChannels] = useState<any[]>([]);
+  const [isRssLoading, setIsRssLoading] = useState(false);
+  const [isHarvesting, setIsHarvesting] = useState(false);
+  const [newRss, setNewRss] = useState({ name: '', url: '' });
 
   const fetchLogs = async () => {
     try {
@@ -372,6 +378,8 @@ const AdminPanel: React.FC = () => {
     } else if (activeTab === 'knowledge') {
       loadKnowledgeBases();
       loadLegalDocs();
+    } else if (activeTab === 'rss') {
+      fetchRssChannels();
     }
   }, [activeTab]);
 
@@ -445,6 +453,96 @@ const AdminPanel: React.FC = () => {
     }
   };
 
+  const fetchRssChannels = async () => {
+    setIsRssLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('discovery_feeds')
+        .select('*')
+        .order('name', { ascending: true });
+        
+      if (error) throw error;
+      setRssChannels(data || []);
+    } catch (err) {
+      console.error('Failed to fetch RSS channels from Supabase', err);
+    } finally {
+      setIsRssLoading(false);
+    }
+  };
+
+  const saveRssChannels = async (updated: any[]) => {
+    // Legacy save logic removed in favor of individual action handlers
+    setRssChannels(updated);
+  };
+
+  const handleAddRss = async () => {
+    if (!newRss.name || !newRss.url) return;
+    try {
+      const { error } = await supabase
+        .from('discovery_feeds')
+        .insert([{ 
+          name: newRss.name, 
+          url: newRss.url, 
+          category_hint: 'General', 
+          feed_type: 'rss',
+          is_active: true 
+        }]);
+      
+      if (error) throw error;
+      setNewRss({ name: '', url: '' });
+      fetchRssChannels();
+    } catch (err) {
+      console.error('Failed to add RSS', err);
+      alert('Błąd podczas dodawania kanału.');
+    }
+  };
+
+  const handleDeleteRss = async (id: string) => {
+    if (!window.confirm('Usunąć ten kanał?')) return;
+    try {
+      const { error } = await supabase
+        .from('discovery_feeds')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      fetchRssChannels();
+    } catch (err) {
+      console.error('Failed to delete RSS', err);
+    }
+  };
+
+  const handleToggleRss = async (id: string) => {
+    const channel = rssChannels.find(c => c.id === id);
+    if (!channel) return;
+    
+    try {
+      const { error } = await supabase
+        .from('discovery_feeds')
+        .update({ is_active: !channel.is_active })
+        .eq('id', id);
+      
+      if (error) throw error;
+      fetchRssChannels();
+    } catch (err) {
+      console.error('Failed to toggle RSS', err);
+    }
+  };
+
+  const handleTriggerHarvest = async () => {
+    setIsHarvesting(true);
+    try {
+      const res = await fetch('/api/news/harvest', { method: 'POST' });
+      if (res.ok) {
+        alert('Harvesting started! It will take a minute to process.');
+      }
+    } catch (err) {
+      console.error('Harvest failed', err);
+    } finally {
+      setIsHarvesting(false);
+    }
+  };
+
   useEffect(() => {
     let result = engineers.filter(e => {
       const nameMatch = (e.name || '').toLowerCase().includes(search.toLowerCase());
@@ -513,6 +611,13 @@ const AdminPanel: React.FC = () => {
         >
           <Activity size={15} />
           Monitoring AI
+        </button>
+        <button 
+          onClick={() => setActiveTab('rss')}
+          style={{ padding: '8px 16px', background: activeTab === 'rss' ? '#f0fdf4' : 'transparent', color: activeTab === 'rss' ? '#16a34a' : '#666', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          <Zap size={15} />
+          Kanały RSS
         </button>
       </div>
 
@@ -1332,6 +1437,107 @@ const AdminPanel: React.FC = () => {
           </main>
         )}
 
+        {/* WIDOK: RSS CHANNELS */}
+        {activeTab === 'rss' && (
+          <main className="admin-main" style={{ padding: '32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>Zarządzanie Kanałami RSS</h2>
+                <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: 4 }}>Skonfiguruj źródła newsów, które AI będzie streszczać na stronę główną.</p>
+              </div>
+              <button 
+                onClick={handleTriggerHarvest}
+                disabled={isHarvesting}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', 
+                  background: isHarvesting ? '#94a3b8' : '#16a34a', color: 'white', 
+                  border: 'none', borderRadius: 10, fontWeight: 600, cursor: isHarvesting ? 'not-allowed' : 'pointer' 
+                }}
+              >
+                <RefreshCw size={18} className={isHarvesting ? 'spin-icon' : ''} />
+                {isHarvesting ? 'Przetwarzanie...' : 'Pobierz nowości teraz'}
+              </button>
+            </div>
+
+            {/* ADD CHANNEL FORM */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: 24, borderRadius: 16, marginBottom: 32 }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Plus size={18} style={{ color: '#16a34a' }} />
+                Dodaj Nowy Kanał
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: 16, alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#64748b', marginBottom: 6 }}>Nazwa portalu</label>
+                  <input 
+                    type="text" 
+                    placeholder="np. Murator Plus" 
+                    value={newRss.name}
+                    onChange={e => setNewRss(p => ({ ...p, name: e.target.value }))}
+                    style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#64748b', marginBottom: 6 }}>URL Kanału RSS</label>
+                  <input 
+                    type="text" 
+                    placeholder="https://example.com/rss" 
+                    value={newRss.url}
+                    onChange={e => setNewRss(p => ({ ...p, url: e.target.value }))}
+                    style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  />
+                </div>
+                <button 
+                  onClick={handleAddRss}
+                  style={{ padding: '10px 24px', background: '#334155', color: 'white', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Dodaj
+                </button>
+              </div>
+            </div>
+
+            {/* CHANNELS LIST */}
+            <div className="table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Nazwa Portalu</th>
+                    <th>URL</th>
+                    <th>Akcje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isRssLoading ? (
+                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: 32 }}>Ładowanie kanałów...</td></tr>
+                  ) : rssChannels.length === 0 ? (
+                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: 32 }}>Brak skonfigurowanych kanałów RSS.</td></tr>
+                  ) : rssChannels.map((ch) => (
+                    <tr key={ch.id}>
+                      <td>
+                        <button 
+                          onClick={() => handleToggleRss(ch.id)}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}
+                        >
+                          {ch.is_active ? <ToggleRight color="#16a34a" size={24} /> : <ToggleLeft color="#cbd5e1" size={24} />}
+                        </button>
+                      </td>
+                      <td className="bold">{ch.name}</td>
+                      <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{ch.url}</td>
+                      <td>
+                        <button 
+                          onClick={() => handleDeleteRss(ch.id)}
+                          style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </main>
+        )}
       </div>
 
       {/* MODAL RAPORTU WZBOGACANIA */}

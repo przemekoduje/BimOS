@@ -47,7 +47,8 @@ const enrichmentControllerPlugin = () => ({
           // Odpal proces z katalogu w którym się znajdujemy
           enrichmentProcess = spawn('node', ['enrich_engineers.cjs'], {
             detached: false,
-            stdio: 'inherit'
+            stdio: 'inherit',
+            env: process.env
           });
 
           enrichmentProcess.on('exit', (code) => {
@@ -67,6 +68,24 @@ const enrichmentControllerPlugin = () => ({
            res.statusCode = 500;
            res.end(JSON.stringify({ error: error.message }));
         }
+        return;
+      }
+
+      // POST /api/news/harvest
+      if (req.url === '/api/news/harvest' && req.method === 'POST') {
+        console.log("[NEWS] Manual harvest triggered...");
+        const child = spawn('node', ['scripts/daily_update.cjs'], {
+          detached: false,
+          stdio: 'inherit',
+          env: process.env
+        });
+        
+        child.on('exit', (code) => {
+          console.log(`[NEWS] Harvest exited with code ${code}`);
+        });
+
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ status: 'harvest_started' }));
         return;
       }
 

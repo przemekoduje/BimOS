@@ -1,141 +1,169 @@
 const fs = require('fs');
 const path = require('path');
-const { isAiDisabled } = require('./check_ai_status.cjs');
+const axios = require('axios');
+const RSSParser = require('rss-parser');
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-// GLOBAL KILL-SWITCH CHECK
-if (isAiDisabled()) {
-  process.exit(0);
-}
-const yahooFinance = require('yahoo-finance2').default;
+const parser = new RSSParser({ 
+  timeout: 10000,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+  }
+});
 
-const OUTPUT_JSON = path.join(__dirname, '../public/daily_update.json');
-const BIBLIA_MD = path.join(__dirname, '../src/knowledge_base/cKOB_biblia.md');
-const GEMINI_API_KEY = process.env.GOOGLE_API_KEY || process.env.VITE_GEMINI_API_KEY;
+// Supabase Init
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY; // or service_role if available
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-const TECH_TICKERS = ['ADSK', 'BSY', 'TRMB', 'NEM.DE', 'BDX.WA'];
-const COMMODITY_TICKERS = [
-  { symbol: 'HRC=F', name: 'Stal Zbrojeniowa' }, 
-  { symbol: 'LBS=F', name: 'Drewno budowlane' },
-  { symbol: 'HG=F', name: 'Miedź (Instalacje)' }
-];
+const GEMINI_API_KEY = process.env.GOOGLE_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.VITE_GOOGLE_API_KEY;
 
-async function generateAIContent() {
-  if (!GEMINI_API_KEY) {
-    console.warn("⚠️ Brak GEMINI_API_KEY. Newsy wygenerowane awaryjnie.");
-    return {
-      news: [{
-        id: "gen_1",
-        title: "Aktualizacja prawa w zakresie cyfrowej książki c-KOB",
-        category: "Przepisy",
-        summary: "Drobne zmiany w strukturze ewidencji z dzisiejszego dnia. Brak autoryzacji do API aby pobrać pełną wersję.",
-        timestamp: "Ostatnio",
-        sourcesCount: 1,
-        imageUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800"
-      }],
-      chatBriefing: "Brak zidentyfikowanych istotnych zmian w prawie.",
-      mdAppend: ""
-    };
+async function runDiscoveryEngine() {
+  console.log("🚀 Starting Autonomous Discovery Engine...");
+
+  // 1. Fetch Active feeds
+  const { data: feeds, error: feedError } = await supabase
+    .from('discovery_feeds')
+    .select('*')
+    .eq('is_active', true);
+
+  if (feedError) {
+    console.error("❌ Error fetching feeds:", feedError);
+    return;
   }
 
-  try {
-    const prompt = `
-Jako elitarny asystent prawno-budowlany wygeneruj podsumowanie DZISIEJSZYCH (najnowszych na ten rok) wytycznych dotyczących cKOB (Cyfrowa Książka Obiektu Budowlanego) i prawa budowlanego. Wynik MUSI być formatem JSON bazującym na tej strukturze:
-{
-  "news": [
-    {
-      "id": "1",
-      "title": "Krótki tytuł newsa prawno-budowlanego na stronę główną",
-      "category": "Regulacje / Technologia",
-      "summary": "Krótkie streszczenie do 2 zdań o cKOB.",
-      "timestamp": "Dzisiaj",
-      "sourcesCount": 5,
-      "imageUrl": "https://images.unsplash.com/photo-1541888941259-792739460a3b?auto=format&fit=crop&q=80&w=800"
+  console.log(`📡 Found ${feeds.length} active feeds.`);
+
+  for (const feed of feeds) {
+    try {
+      console.log(`\n--- Processing: ${feed.name} ---`);
+      const rssData = await parser.parseURL(feed.url);
+      
+      // Process top 3 newest items per feed to avoid token overflow
+      const items = rssData.items.slice(0, 5); // Process up to 5 latest items to keep it lean
+
+      for (const item of items) {
+        // 1. Check if article already processed via AI (Single-Run Optimization)
+        const { data: existing, error: checkError } = await supabase
+          .from('discovery_articles')
+          .select('id')
+          .eq('external_id', item.link)
+          .maybeSingle();
+
+        if (checkError) {
+          console.error(`- Error checking existence for ${item.link}:`, checkError);
+          continue;
+        }
+
+        if (existing) {
+          console.log(`- Skipping (already analyzed & in DB): ${item.title}`);
+          continue;
+        }
+
+        console.log(`- Analyzing new article: ${item.title}`);
+        
+        // AI Enrichment
+        let enriched = await enrichWithAI(item, feed.category_hint);
+        
+        if (!enriched) {
+          console.log(`⚠️ AI skipped/failed for ${item.title}, using raw RSS data as fallback.`);
+          enriched = {
+            title: item.title,
+            summary: item.contentSnippet || item.content || 'Brak opisu z kanału RSS.',
+            category: feed.category_hint || 'Ogólne',
+            tags: [],
+            articleType: 'news',
+            imageUrl: 'https://images.unsplash.com/photo-1541888941259-792739460a3b?auto=format&fit=crop&q=80&w=600',
+            visualPrompt: ''
+          };
+        }
+
+        // Upsert to Supabase
+        const { error: upsertError } = await supabase
+          .from('discovery_articles')
+          .upsert({
+            feed_id: feed.id,
+            external_id: item.link,
+            title: enriched.title || item.title,
+            summary: enriched.summary,
+            content: item.content || item.contentSnippet || '',
+            url: item.link,
+            image_url: enriched.imageUrl,
+            category: enriched.category,
+            tags: enriched.tags,
+            article_type: enriched.articleType || 'news',
+            ui_template: enriched.uiTemplate || (enriched.category === 'Prawo' ? 'legal' : 'news'),
+            metadata: {
+              original_author: item.creator || item.author,
+              source_name: feed.name,
+              visual_prompt: enriched.visualPrompt
+            },
+            published_at: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString()
+          }, { onConflict: 'external_id' });
+
+        if (upsertError) {
+          console.error(`❌ Failed to upsert article: ${item.title}`, upsertError);
+        } else {
+          console.log(`✅ Synced: ${item.title} -> [${enriched.category}]`);
+        }
+      }
+
+      // Update feed last_fetched_at
+      await supabase
+        .from('discovery_feeds')
+        .update({ last_fetched_at: new Date().toISOString() })
+        .eq('id', feed.id);
+
+    } catch (e) {
+      console.error(`⚠️ Failed to process feed ${feed.name}:`, e.message);
     }
-  ],
-  "chatBriefing": "Krótkie jednozdaniowe powiadomienie do asystenta Czatowego z instrukcją o czym ma dzisiaj w razie pytań opowiadać z newsów (np. Zmiany w protokołach kominiarskich cKOB).",
-  "mdAppend": "Kompletny paragraf w języku Markdown (ok. 300 znaków) opisujący fachowo wejście w życie tej dzisiejszej zmiany."
+  }
 }
 
-Generuj bezpośrednio raw JSON bez znaczników \`\`\`json.
+async function enrichWithAI(rssItem, categoryHint) {
+  if (!GEMINI_API_KEY) return null;
+
+  try {
+    // TOKEN PRUNING: Usuwamy nadmiarowy szum (skrypty, stopki, dziwne formatowanie)
+    // Ograniczamy długość do pierwszych 2000 znaków (esencja dla modelu), reszta odcięta by oszczędzać tokeny.
+    let prunedContent = rssItem.contentSnippet || rssItem.title;
+    if (prunedContent.length > 2000) {
+      prunedContent = prunedContent.substring(0, 2000) + '...';
+    }
+
+    const prompt = `
+Enrich this construction/AEC news item for a discovery engine.
+TITLE: ${rssItem.title}
+CONTENT: ${prunedContent}
+CATEGORY HINT: ${categoryHint || 'General'}
+
+CRITICAL TASK: In the "summary", if you use any highly technical terminology, wrap the term and its short definition using this exact syntax: [[Term::Definition of term]]. 
+Example: "Wdrożono zaawansowany [[BIM::Building Information Modeling - cyfrowy zapis danych budowli]] dla nowego projektu."
+
+Return JSON exactly:
+{
+  "title": "Improved, technical title in Polish",
+  "summary": "Technical summary in Polish (2-3 sentences). Include interactive [[Term::Definition]] tags if applicable.",
+  "category": "One specific Polish category (eg. Prawo, Technologia, Rynek, Materiały)",
+  "tags": ["tag1", "tag2"],
+  "articleType": "news|tech|market",
+  "uiTemplate": "legal|news|minimal",
+  "imageUrl": "High quality Unsplash architectural URL"
+}
+Output raw JSON only.
 `;
-    const res = await axios.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY, {
+    const res = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       contents: [{ parts: [{ text: prompt }] }]
     });
 
-    let rawJson = res.data.candidates[0].content.parts[0].text;
-    rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(rawJson);
-  } catch (error) {
-    console.error("❌ Błąd Gemini API:", error?.response?.data || error.message);
-    throw error;
-  }
-}
-
-async function fetchMarket() {
-  const mapStock = async (ticker) => {
-    try {
-      const q = await yahooFinance.quote(ticker);
-      const isPos = q.regularMarketChangePercent > 0;
-      return {
-        name: q.shortName || ticker,
-        val: q.regularMarketPrice.toFixed(2) + " " + q.currency,
-        ticker: ticker,
-        change: (isPos ? "+" : "") + q.regularMarketChangePercent.toFixed(2) + "%",
-        trend: isPos ? "positive" : "negative"
-      };
-    } catch { return null; }
-  };
-
-  const mapComm = async (item) => {
-    try {
-      const q = await yahooFinance.quote(item.symbol);
-      const isPos = q.regularMarketChangePercent > 0;
-      return {
-        name: item.name,
-        val: q.regularMarketPrice.toFixed(2) + " " + q.currency,
-        ticker: item.symbol.replace("=F", ""),
-        change: (isPos ? "+" : "") + q.regularMarketChangePercent.toFixed(2) + "%",
-        trend: isPos ? "positive" : "negative"
-      };
-    } catch { return null; }
-  };
-
-  const techStocks = (await Promise.all(TECH_TICKERS.map(mapStock))).filter(Boolean);
-  const commodities = (await Promise.all(COMMODITY_TICKERS.map(mapComm))).filter(Boolean);
-  return { techStocks, commodities };
-}
-
-async function run() {
-  console.log("🚀 Uruchamianie Harvestera Danych...");
-  try {
-    const marketData = await fetchMarket();
-    console.log("📈 Pobrano dane giełdowe!");
-
-    const aiContent = await generateAIContent();
-    console.log("🤖 Wygenerowano brief prawny cKOB!");
-
-    const outputData = {
-      lastUpdate: new Date().toISOString(),
-      news: aiContent.news,
-      chatBriefing: aiContent.chatBriefing,
-      marketData: marketData
-    };
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(outputData, null, 2), "utf-8");
-    console.log("✅ Nadpisano public/daily_update.json");
-
-    if (aiContent.mdAppend && aiContent.mdAppend.length > 20) {
-      const dbContent = fs.readFileSync(BIBLIA_MD, "utf-8");
-      if (!dbContent.includes(aiContent.mdAppend.substring(0, 50))) {
-        const docHeader = "\\n\\n### ZMIANY Z DNIA " + new Date().toLocaleDateString() + "\\n";
-        fs.appendFileSync(BIBLIA_MD, docHeader + aiContent.mdAppend, "utf-8");
-        console.log("✅ Baza cKOB zaktualizowana!");
-      } else {
-        console.log("ℹ️ Baza MD posiada już najnowszy wtręt.");
-      }
-    }
+    let raw = res.data.candidates[0].content.parts[0].text;
+    raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(raw);
   } catch (err) {
-    console.error("❌ Skrypt zatrzymany z błędem:", err);
+    console.error("🤖 AI Enrichment failed:", err.message);
+    return null;
   }
 }
 
-run();
+runDiscoveryEngine();

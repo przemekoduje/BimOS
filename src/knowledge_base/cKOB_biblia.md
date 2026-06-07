@@ -3480,3 +3480,11 @@ Dzięki wdrożeniu skryptów naprawczych i API Google Search, Twoja aplikacja zy
 
 3. Walidacja typów: W skrypcie enrich_engineers.cjs należy zachować wprowadzoną poprawkę String(id), co zapobiegnie błędom przy automatycznym dopisywaniu znalezionych e-maili do rekordów inżynierów w bazie danych.
 
+
+
+### ZMIANY Z DNIA 4/20/2026
+### Nowe wymogi bezpieczeństwa sieci telekomunikacyjnych
+Nowelizacja ustawy o wspieraniu rozwoju usług i sieci telekomunikacyjnych wprowadza znaczące zmiany prawne, które bezpośrednio wpływają na projektowanie i wykonawstwo infrastruktury. Inżynierowie i wykonawcy muszą dostosować swoje procesy do nowych wytycznych, ze szczególnym uwzględnieniem cyberbezpieczeństwa i odporności sieci na zagrożenia, co jest kluczowe dla zapewnienia ciągłości usług. Ta zmiana wymaga pilnej analizy i wdrożenia w praktyce inżynierskiej.
+
+### ZMIANY Z DNIA 4/20/2026
+Kluczową zmianą wpływającą na bazę wiedzy jest nowelizacja ustawy o wspieraniu rozwoju usług i sieci telekomunikacyjnych. Nakłada ona nowe obowiązki na inżynierów w zakresie bezpieczeństwa sieci, co wymaga aktualizacji procedur projektowych i wykonawczych dla infrastruktury krytycznej, zwłaszcza w kontekście BIM.

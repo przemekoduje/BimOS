@@ -63,7 +63,10 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onCardClick }) => {
         {MOCK_NEWS.map(item => (
           <NewsCard 
             key={item.id}
-            {...item}
+            id={item.id}
+            title={item.title}
+            category={item.category}
+            imageUrl={item.images[0]}
             onClick={onCardClick}
           />
         ))}

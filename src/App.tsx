@@ -74,7 +74,9 @@ const ShareModal = ({ chat, onClose }: { chat: ChatSession, onClose: () => void 
 };
 
 function App() {
-  const [view, setView] = useState<'search' | 'admin' | 'discover' | 'inspection'>('search');
+  const [view, setView] = useState<'search' | 'admin' | 'discover' | 'inspection'>(() => {
+    return (localStorage.getItem('bimos_current_view') as any) || 'search';
+  });
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
@@ -138,10 +140,10 @@ function App() {
         setIsLoggedIn(true);
         setUserEmail(email);
         
-        // Only switch to admin view ON SIGN IN, not on session refresh
-        if (email === ADMIN_EMAIL && _event === 'SIGNED_IN') {
-          setView('admin');
-        }
+        // Wyłączone, żeby po odświeżeniu użytkownik zostawał na aktualnym widoku
+        // if (email === ADMIN_EMAIL && _event === 'SIGNED_IN') {
+        //   setView('admin');
+        // }
         loadChatHistory();
       } else if (_event === 'SIGNED_OUT') {
         // Only reset view on EXPLICIT sign out, not on session transient nulls
@@ -158,6 +160,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('bimos_local_pins', JSON.stringify([...localPinnedIds]));
   }, [localPinnedIds]);
+
+  useEffect(() => {
+    localStorage.setItem('bimos_current_view', view);
+  }, [view]);
 
   useEffect(() => {
     localStorage.setItem('bimos_folders', JSON.stringify(folders));

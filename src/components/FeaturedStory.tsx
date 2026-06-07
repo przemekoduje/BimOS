@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, MoreHorizontal, MessageSquare } from 'lucide-react';
+import { Heart, MoreHorizontal, MessageSquare, Share2 } from 'lucide-react';
 import './FeaturedStory.css';
 
 interface FeaturedStoryProps {
@@ -16,36 +16,33 @@ const FeaturedStory: React.FC<FeaturedStoryProps> = ({
   id, title, summary, timestamp, sourcesCount, imageUrl, onClick 
 }) => {
   return (
-    <div className="featured-story" onClick={() => onClick(id)}>
-      <div className="featured-main">
-        <header className="featured-header">
-          <h1 className="featured-title">{title}</h1>
-          <div className="featured-meta">
-            <span className="timestamp">Opublikowano {timestamp}</span>
-          </div>
-        </header>
+    <div className="featured-story-px" onClick={() => onClick(id)}>
+      <div className="f-content">
+        <h1 className="f-title">{title}</h1>
+        <div className="f-meta">
+           <Share2 size={14} className="f-icon-blue" />
+           <span className="f-time">Opublikowano {timestamp}</span>
+        </div>
+        <p className="f-summary">{summary}</p>
         
-        <p className="featured-summary">{summary}</p>
-        
-        <footer className="featured-footer">
-          <div className="footer-left">
-            <div className="source-avatars">
-              <div className="avatar">A</div>
-              <div className="avatar">B</div>
-              <div className="avatar">C</div>
+        <div className="f-footer">
+          <div className="f-sources">
+            <div className="avatar-stack">
+              <div className="av-mini b-blue">B</div>
+              <div className="av-mini b-teal">E</div>
+              <div className="av-mini b-navy">I</div>
             </div>
-            <span className="source-count">{sourcesCount} źródeł</span>
+            <span className="f-count">{sourcesCount} źródeł</span>
           </div>
-          <div className="footer-right">
-            <button className="feat-action-btn"><Heart size={18} /></button>
-            <button className="feat-action-btn"><MessageSquare size={18} /></button>
-            <button className="feat-action-btn"><MoreHorizontal size={18} /></button>
+          <div className="f-actions">
+            <button className="f-act-btn"><Heart size={18} /></button>
+            <button className="f-act-btn"><MoreHorizontal size={18} /></button>
           </div>
-        </footer>
+        </div>
       </div>
       
-      <div className="featured-image-container">
-        <img src={imageUrl} alt={title} className="featured-image" />
+      <div className="f-image">
+        <img src={imageUrl} alt={title} />
       </div>
     </div>
   );

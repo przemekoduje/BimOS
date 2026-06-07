@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.101.1",
+    "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^17.4.0",
     "firebase": "^12.10.0",
     "firebase-admin": "^13.7.0",
@@ -22,6 +22,7 @@
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "rss-parser": "^3.13.0",
     "yahoo-finance2": "^3.14.0"
   },
   "devDependencies": {
